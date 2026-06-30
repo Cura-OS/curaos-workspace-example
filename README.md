@@ -27,6 +27,10 @@ This is **not** a runnable product. It is the *workspace management layer*: the 
 - **Cross-harness adversarial verification.** One harness grills another's output before it merges (`opposite-harness-grill`).
 - **A doc graph that must stay connected.** Every markdown file stays reachable from the root `AGENTS.md`; CI enforces it.
 
+## Adopting it yourself
+
+Code, specs, and runtime state were stripped, leaving empty slots in the paradigm. **[SETUP.md](SETUP.md)** documents every slot: the missing `curaos/` code twin, per-module `Requirements.md`, the `.scratch/` tracker state, research/roadmap dirs, and the placeholders to swap. Start there to stand up your own workspace.
+
 ## What was removed / changed before publishing
 
 This snapshot was scrubbed so it leaks nothing private:
