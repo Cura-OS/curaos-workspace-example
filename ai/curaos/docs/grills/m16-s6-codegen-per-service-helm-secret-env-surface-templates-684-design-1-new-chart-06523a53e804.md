@@ -1,0 +1,11 @@
+# Opposite Harness Grill Blocked
+
+GRILL: blocked-harness-unavailable
+GRILL-PROBE: {"available":false,"reason":"opposite-harness grill report missing","evidence":"{\"verdict\":\"pass\",\"issues\":[],\"report_path\":\"\",\"verified_sha\":\"\"}"}
+GRILL-HARNESS: codex
+GRILL-AGENT: codex:codex-rescue
+GRILL-TIMEOUT-MS: 600000
+GRILL-REASON: grill-result-report-path-missing-or-mismatched
+
+The opposite-harness adversarial leg failed fast and no single-reviewer fallback should be treated as a completed opposite-harness grill.
+Subject: M16-S6 codegen per-service Helm Secret + env-surface templates (#684). Design: (1) NEW chart/templates/secret.yaml in service-{core,personal,business} trees, byte-identical trio, gated by .Values.secret.create (default true), data from .Values.secret.data (b64enc, JWT keys CURAOS_JWT_ES256_PUBLIC_JWK + CURAOS_JWT_HS256_SECRET as empty release-time placeholders), name via NEW _helpers.tpl define curaos-service.secretName (default <fullname>-secret). (2) deployment.yaml: KEEP existing envFrom configMapRef + secretRef .Values.secretName (backward compat), ADD explicit env: rendered from .Values.secretEnv list of {name,secretName,secretKey,optional} -> valueFrom.secretKeyRef so durable PHI DSN env keys (SUBJECT_RIGHTS_CERTIFICATE_DATABASE_URL, BREAK_GLASS_AUDIT_EVIDENCE_DATABASE_URL, DATABASE_URL) resolve to the CNPG <cluster>-app secret uri key at deploy time without inlining any DSN; default secretEnv [] = fully backward compatible. (3) values.yaml.hbs declares secret.create/secret.name/secret.data + secretEnv. PHI DSN never stored in chart Secret (stays in CNPG protected-namespace secret per tenant-data-isolation). Generator-first: planTemplateFiles + emitChartForService walk the tree dynamically so secret.yaml auto-emits with NO src change. Tests in tools/codegen/__tests__ extend the existing 537 trio-symmetry VERBATIM_HELM_FILES/CHART_FILES lists + add a render test asserting kind:Secret + envFrom + a secretKeyRef DSN env via emitServiceLive tmp fixture + helm template. Question the design for: fail-closed correctness, CNPG handoff resolvability, trio symmetry risk, rolling-update compliance, PHI boundary, helm-render gotchas (b64enc empty string, optional secretKeyRef semantics), hidden deps, missing required-env keys.

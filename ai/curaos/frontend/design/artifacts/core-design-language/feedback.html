@@ -1,0 +1,196 @@
+<!-- @dsCard group="Feedback" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CuraOS · Feedback</title>
+<style>
+  :root{
+    --primary-400:#1fb0d4;--primary-500:#0e90b8;--primary-600:#0d7197;
+    --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Inter','Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:#eceff0;color:#161b1c;padding:24px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto}
+  .hdr{margin-bottom:24px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--primary-600)}
+  h1{font-size:32px;font-weight:600;letter-spacing:-0.015em;margin:6px 0 4px}
+  .sub{font-size:15px;color:#525c5e;max-width:64ch}
+  .panes{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:980px){.panes{grid-template-columns:1fr}}
+  .pane{border-radius:16px;padding:22px;border:1px solid}
+  .pane.light{background:#f6f8f8;color:#161b1c;border-color:#dde2e3;
+    --bg:#f6f8f8;--fg:#161b1c;--muted:#525c5e;--sub:#6e797b;--line:#dde2e3;--surf:#fff;--skel:#e3e8e8;
+    --pri:var(--primary-600);--pri-sub:#e8fbff;
+    --suc:#188a4c;--suc-bg:#e7f8ec;--suc-bd:#8edcab;--warn:#b3760a;--warn-bg:#fdf4e3;--warn-bd:#f3cb78;
+    --err:#bb3328;--err-bg:#fdeceb;--err-bd:#f1a5a0;--inf:#1276ad;--inf-bg:#e8f4fb;--inf-bd:#92cbed}
+  .pane.dark{background:#0d1112;color:#eceff0;border-color:#2c3537;
+    --bg:#0d1112;--fg:#eceff0;--muted:#9aa5a7;--sub:#6e797b;--line:#2c3537;--surf:#161b1c;--skel:#242b2b;
+    --pri:var(--primary-400);--pri-sub:#0a2030;
+    --suc:#52c47f;--suc-bg:#0f2e1d;--suc-bd:#1c5436;--warn:#ecae35;--warn-bg:#352608;--warn-bd:#5d3d0e;
+    --err:#e5746c;--err-bg:#3a1714;--err-bd:#621c18;--inf:#52ade0;--inf-bg:#0c2e44;--inf-bd:#0d3e5b}
+  .pane-tag{font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;opacity:.6;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  .pane-tag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--primary-500)}
+  .lbl{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0;color:var(--sub);opacity:1;margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .lbl::before{content:"";width:14px;height:1px;background:var(--line)}
+  .lbl:first-of-type{margin-top:0}
+  svg.ic{width:18px;height:18px;stroke:currentColor;stroke-width:1.8;fill:none;flex-shrink:0}
+  /* alert/banner */
+  .alert{display:flex;gap:11px;padding:12px 14px;border-radius:10px;border:1px solid;margin-bottom:10px;font-size:13px}
+  .alert .at{font-weight:600;margin-bottom:1px}
+  .alert .ab{color:var(--muted)}
+  .alert .x{margin-left:auto;cursor:pointer;opacity:.5;font-size:16px;line-height:1}
+  .alert .x:hover{opacity:1}
+  .a-suc{background:var(--suc-bg);border-color:var(--suc-bd);color:var(--suc)}
+  .a-warn{background:var(--warn-bg);border-color:var(--warn-bd);color:var(--warn)}
+  .a-err{background:var(--err-bg);border-color:var(--err-bd);color:var(--err)}
+  .a-inf{background:var(--inf-bg);border-color:var(--inf-bd);color:var(--inf)}
+  .banner{display:flex;align-items:center;gap:11px;padding:11px 16px;border-radius:10px;font-size:13px;font-weight:500}
+  .banner.b-pri{background:var(--pri-sub);color:var(--pri);border:1px solid transparent}
+  .banner a{margin-left:auto;font-weight:600;color:inherit;text-decoration:underline;cursor:pointer;font-size:12px}
+  /* toast */
+  .toast{display:flex;gap:11px;align-items:flex-start;background:var(--surf);border:1px solid var(--line);
+    border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(13,17,18,.12);font-size:13px;max-width:340px}
+  .toast .tt{font-weight:600;color:var(--fg)}.toast .tb{color:var(--muted);font-size:12px}
+  .toast .ti{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+  .ti-suc{background:var(--suc-bg);color:var(--suc)}.ti-err{background:var(--err-bg);color:var(--err)}
+  /* badges */
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;letter-spacing:.01em}
+  .bg-pri{background:var(--pri-sub);color:var(--pri)}
+  .bg-neu{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+  .pill{font-size:11px;font-weight:600;padding:2px 9px;border-radius:9999px}
+  .p-suc{background:var(--suc-bg);color:var(--suc)}.p-warn{background:var(--warn-bg);color:var(--warn)}
+  .p-err{background:var(--err-bg);color:var(--err)}.p-inf{background:var(--inf-bg);color:var(--inf)}
+  .status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+  .status::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+  .s-on{color:var(--suc)}.s-deg{color:var(--warn)}.s-off{color:var(--err)}.s-idle{color:var(--sub)}
+  .live::before{box-shadow:0 0 0 0 currentColor;animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(24,138,76,.5)}70%{box-shadow:0 0 0 6px rgba(24,138,76,0)}100%{box-shadow:0 0 0 0 rgba(24,138,76,0)}}
+  /* avatar */
+  .av{width:36px;height:36px;border-radius:9px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:600}
+  .pane.dark .av{color:#0d1112}
+  .av.circle{border-radius:50%}
+  .av-stack{display:flex}.av-stack .av{margin-left:-9px;border:2px solid var(--surf);width:34px;height:34px;border-radius:50%}
+  .av-stack .av:first-child{margin-left:0}
+  .av .pdot{position:relative}
+  .av-wrap{position:relative;display:inline-block}
+  .av-wrap .pres{position:absolute;bottom:-1px;right:-1px;width:11px;height:11px;border-radius:50%;background:var(--suc);border:2px solid var(--surf)}
+  /* skeleton */
+  .skel{background:var(--skel);border-radius:6px;position:relative;overflow:hidden}
+  .skel::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent);animation:shim 1.4s infinite}
+  .pane.dark .skel::after{background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent)}
+  @keyframes shim{100%{transform:translateX(200%)}}
+  .skel-card{display:flex;gap:12px;align-items:center;background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .spin{width:20px;height:20px;border:2.5px solid var(--line);border-top-color:var(--pri);border-radius:50%;animation:sp .7s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .bar{height:6px;border-radius:3px;background:var(--skel);overflow:hidden;position:relative}
+  .bar i{position:absolute;inset:0;width:38%;background:var(--pri);border-radius:3px;animation:slide 1.4s ease-in-out infinite}
+  @keyframes slide{0%{left:-40%}100%{left:100%}}
+  /* empty state */
+  .empty{text-align:center;background:var(--surf);border:1px dashed var(--line);border-radius:12px;padding:30px 20px}
+  .empty .ei{width:48px;height:48px;border-radius:12px;background:var(--pri-sub);color:var(--pri);display:grid;place-items:center;margin:0 auto 12px}
+  .empty .ei svg{width:24px;height:24px}
+  .empty h4{font-size:15px;font-weight:600;margin-bottom:4px}
+  .empty p{font-size:13px;color:var(--muted);max-width:36ch;margin:0 auto 14px}
+  .empty button{font-family:inherit;font-size:13px;font-weight:600;background:var(--pri);color:#fff;border:0;border-radius:8px;padding:8px 16px;cursor:pointer}
+  .pane.dark .empty button{color:#0d1112}
+  /* tooltip */
+  .tipdemo{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+  .tip{position:relative;display:inline-flex}
+  .tip>.trg{font-size:13px;font-weight:500;border-bottom:1.5px dotted var(--muted);cursor:help;padding-bottom:1px}
+  .tip>.bub{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%) scale(.96);
+    background:#161b1c;color:#fff;font-size:12px;font-weight:500;padding:6px 10px;border-radius:7px;white-space:nowrap;
+    opacity:0;pointer-events:none;transition:.14s}
+  .pane.dark .tip>.bub{background:#eceff0;color:#0d1112}
+  .tip>.bub::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#161b1c}
+  .pane.dark .tip>.bub::after{border-top-color:#eceff0}
+  .tip:hover>.bub{opacity:1;transform:translateX(-50%) scale(1)}
+
+  /* responsive: desktop / tablet / mobile */
+  @media(max-width:680px){
+    body{padding:16px}
+    .wrap{padding:0}
+    h1{font-size:26px}
+    .pane{padding:18px 16px}
+    .twocol{grid-template-columns:1fr!important}
+    .kpis{grid-template-columns:1fr 1fr!important}
+    .charts,.cards{grid-template-columns:1fr!important}
+    .dp{width:100%!important}
+  }
+  @media(max-width:400px){ .kpis{grid-template-columns:1fr!important} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="eyebrow">CuraOS · Aqua</div>
+    <h1>Feedback</h1>
+    <p class="sub">Alerts, banners, toasts, badge/pill/status, avatars (with presence), skeleton + loader, empty-state, and tooltip. Status semantics carry the color load; the primary banner is the only chrome use of brand.</p>
+  </div>
+  <div class="panes" id="panes">
+    <div class="pane light"><div class="pane-tag">Light</div><div class="content"></div></div>
+    <div class="pane dark"><div class="pane-tag">Dark</div><div class="content"></div></div>
+  </div>
+</div>
+
+<script>
+  var IC={
+    suc:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>',
+    warn:'<svg class="ic" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+    err:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
+    inf:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+    inbox:'<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7" fill="none"><path d="M3 13h4l2 3h6l2-3h4M5 5h14a2 2 0 0 1 2 2v12H3V7a2 2 0 0 1 2-2z"/></svg>'
+  };
+
+  function tpl(){return ''+
+    '<div class="lbl">Alerts</div>'+
+    '<div class="alert a-suc">'+IC.suc+'<div><div class="at">Stack provisioned</div><div class="ab">HealthStack is live for Northgate Health.</div></div><span class="x" onclick="this.closest(\'.alert\').remove()">×</span></div>'+
+    '<div class="alert a-warn">'+IC.warn+'<div><div class="at">Sync lag detected</div><div class="ab">Westform District is 4 min behind schedule.</div></div><span class="x" onclick="this.closest(\'.alert\').remove()">×</span></div>'+
+    '<div class="alert a-err">'+IC.err+'<div><div class="at">Incident on Bramble ERP</div><div class="ab">Uptime dropped to 97.1%. Page on-call.</div></div><span class="x" onclick="this.closest(\'.alert\').remove()">×</span></div>'+
+    '<div class="alert a-inf">'+IC.inf+'<div><div class="at">Maintenance window</div><div class="ab">EU-West-2 patching Sunday 02:00 UTC.</div></div></div>'+
+
+    '<div class="lbl">Banner</div>'+
+    '<div class="banner b-pri">New: per-tenant theming via token swap is live.<a>Read the guide</a></div>'+
+
+    '<div class="lbl">Toasts</div>'+
+    '<div class="row" style="gap:10px">'+
+      '<div class="toast"><div class="ti ti-suc">'+IC.suc+'</div><div><div class="tt">Saved</div><div class="tb">Tenant settings updated.</div></div></div>'+
+      '<div class="toast"><div class="ti ti-err">'+IC.err+'</div><div><div class="tt">Export failed</div><div class="tb">Retrying in 5s…</div></div></div>'+
+    '</div>'+
+
+    '<div class="lbl">Badge · pill · status</div>'+
+    '<div class="row"><span class="badge bg-pri">Primary</span><span class="badge bg-neu">Default</span>'+
+      '<span class="pill p-suc">Active</span><span class="pill p-warn">Trial</span><span class="pill p-err">Suspended</span><span class="pill p-inf">New</span></div>'+
+    '<div class="row" style="margin-top:10px">'+
+      '<span class="status s-on live">Operational</span><span class="status s-deg">Degraded</span>'+
+      '<span class="status s-off">Down</span><span class="status s-idle">Idle</span></div>'+
+
+    '<div class="lbl">Avatars</div>'+
+    '<div class="row">'+
+      '<div class="av-wrap"><div class="av">AO</div><span class="pres"></span></div>'+
+      '<div class="av circle">PR</div>'+
+      '<div class="av-stack"><div class="av">AO</div><div class="av">PR</div><div class="av">LV</div><div class="av" style="background:var(--bg);color:var(--muted)">+9</div></div>'+
+    '</div>'+
+
+    '<div class="lbl">Skeleton + loader</div>'+
+    '<div class="skel-card"><div class="skel" style="width:36px;height:36px;border-radius:9px"></div>'+
+      '<div style="flex:1"><div class="skel" style="height:11px;width:55%;margin-bottom:7px"></div><div class="skel" style="height:9px;width:80%"></div></div></div>'+
+    '<div class="row" style="margin-top:10px;align-items:center"><div class="spin"></div><div style="flex:1"><div class="bar"><i></i></div></div></div>'+
+
+    '<div class="lbl">Empty state</div>'+
+    '<div class="empty"><div class="ei">'+IC.inbox+'</div><h4>No tenants yet</h4>'+
+      '<p>Provision your first tenant to bring a stack online. It takes about 40 seconds.</p>'+
+      '<button>Provision tenant</button></div>'+
+
+    '<div class="lbl">Tooltip · hover</div>'+
+    '<div class="tipdemo">'+
+      '<span class="tip"><span class="trg">Uptime SLA</span><span class="bub">99.9% measured monthly</span></span>'+
+      '<span class="tip"><span class="trg">Token swap</span><span class="bub">Re-skins all 22 apps at once</span></span>'+
+    '</div>';
+  }
+  document.querySelectorAll('.content').forEach(function(c){c.innerHTML=tpl();});
+</script>
+</body>
+</html>

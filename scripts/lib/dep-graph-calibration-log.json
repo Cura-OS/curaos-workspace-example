@@ -1,0 +1,1413 @@
+{
+  "schemaVersion": 1,
+  "records": [
+    {
+      "schemaVersion": 1,
+      "waveId": "M8,M9,M11,M12,M15-2026-06-05T13:16:48.310Z",
+      "milestone": "M8,M9,M11,M12,M15",
+      "dispatchedAt": "2026-06-05T13:16:48.310Z",
+      "weights": {
+        "unblock": 0.5,
+        "cp": 0.3,
+        "prio": 0.15,
+        "effort": 0.05
+      },
+      "candidates": [
+        {
+          "issue": "your-org/curaos-ai-workspace#317",
+          "rankAtDispatch": 1,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#336",
+          "rankAtDispatch": 2,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#356",
+          "rankAtDispatch": 3,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#357",
+          "rankAtDispatch": 4,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#407",
+          "rankAtDispatch": 5,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#408",
+          "rankAtDispatch": 6,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        }
+      ],
+      "outcome": {
+        "windowClosedAt": "2026-06-05T13:23:51.374Z",
+        "freed": [
+          {
+            "issue": "your-org/curaos-ai-workspace#317",
+            "freedCount": 0
+          },
+          {
+            "issue": "your-org/curaos-ai-workspace#336",
+            "freedCount": 0
+          },
+          {
+            "issue": "your-org/curaos-ai-workspace#356",
+            "freedCount": 0
+          },
+          {
+            "issue": "your-org/curaos-ai-workspace#357",
+            "freedCount": 0
+          },
+          {
+            "issue": "your-org/curaos-ai-workspace#407",
+            "freedCount": 0
+          },
+          {
+            "issue": "your-org/curaos-ai-workspace#408",
+            "freedCount": 0
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "waveId": "M8,M9,M11,M12,M15-2026-06-05T13:40:25.731Z",
+      "milestone": "M8,M9,M11,M12,M15",
+      "dispatchedAt": "2026-06-05T13:40:25.731Z",
+      "weights": {
+        "unblock": 0.5,
+        "cp": 0.3,
+        "prio": 0.15,
+        "effort": 0.05
+      },
+      "candidates": [
+        {
+          "issue": "your-org/curaos-ai-workspace#317",
+          "rankAtDispatch": 1,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#336",
+          "rankAtDispatch": 2,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#356",
+          "rankAtDispatch": 3,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#357",
+          "rankAtDispatch": 4,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#407",
+          "rankAtDispatch": 5,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#408",
+          "rankAtDispatch": 6,
+          "score": 0.1542,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        }
+      ],
+      "outcome": {
+        "windowClosedAt": "2026-06-05T13:42:19.306Z",
+        "freed": [
+          {
+            "issue": "your-org/curaos-ai-workspace#317",
+            "freedCount": 0
+          },
+          {
+            "issue": "your-org/curaos-ai-workspace#336",
+            "freedCount": 0
+          },
+          {
+            "issue": "your-org/curaos-ai-workspace#356",
+            "freedCount": 0
+          },
+          {
+            "issue": "your-org/curaos-ai-workspace#357",
+            "freedCount": 0
+          },
+          {
+            "issue": "your-org/curaos-ai-workspace#407",
+            "freedCount": 0
+          },
+          {
+            "issue": "your-org/curaos-ai-workspace#408",
+            "freedCount": 0
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "waveId": "M11,M12,M15-2026-06-07T12:15:52.737Z",
+      "milestone": "M11,M12,M15",
+      "dispatchedAt": "2026-06-07T12:15:52.737Z",
+      "weights": {
+        "unblock": 0.5,
+        "cp": 0.3,
+        "prio": 0.15,
+        "effort": 0.05
+      },
+      "candidates": [
+        {
+          "issue": "your-org/curaos-ai-workspace#330",
+          "rankAtDispatch": 1,
+          "score": 0.1631,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#407",
+          "rankAtDispatch": 2,
+          "score": 0.1631,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#512",
+          "rankAtDispatch": 3,
+          "score": 0.1631,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "waveId": "M17-2026-06-07T15:50:17.158Z",
+      "milestone": "M17",
+      "dispatchedAt": "2026-06-07T15:50:17.158Z",
+      "weights": {
+        "unblock": 0.5,
+        "cp": 0.3,
+        "prio": 0.15,
+        "effort": 0.05
+      },
+      "candidates": [
+        {
+          "issue": "your-org/curaos-ai-workspace#544",
+          "rankAtDispatch": 1,
+          "score": 0.8167,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "waveId": "M17-2026-06-07T15:51:03.845Z",
+      "milestone": "M17",
+      "dispatchedAt": "2026-06-07T15:51:03.845Z",
+      "weights": {
+        "unblock": 0.5,
+        "cp": 0.3,
+        "prio": 0.15,
+        "effort": 0.05
+      },
+      "candidates": [
+        {
+          "issue": "your-org/curaos-ai-workspace#544",
+          "rankAtDispatch": 1,
+          "score": 0.8167,
+          "unblockReachAtDispatch": 1,
+          "criticalPathDepth": 1,
+          "priority": null,
+          "effort": null
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "waveId": "M12,M15,M16,M17-2026-06-13T17:46:35.390Z",
+      "milestone": "M12,M15,M16,M17",
+      "dispatchedAt": "2026-06-13T17:46:35.390Z",
+      "weights": {
+        "unblock": 0.5,
+        "cp": 0.3,
+        "prio": 0.15,
+        "effort": 0.05
+      },
+      "candidates": [
+        {
+          "issue": "your-org/curaos-ai-workspace#684",
+          "rankAtDispatch": 1,
+          "score": 0.5678,
+          "unblockReachAtDispatch": 8,
+          "criticalPathDepth": 5,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#685",
+          "rankAtDispatch": 2,
+          "score": 0.5678,
+          "unblockReachAtDispatch": 8,
+          "criticalPathDepth": 5,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#686",
+          "rankAtDispatch": 3,
+          "score": 0.5678,
+          "unblockReachAtDispatch": 8,
+          "criticalPathDepth": 5,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#687",
+          "rankAtDispatch": 4,
+          "score": 0.5678,
+          "unblockReachAtDispatch": 8,
+          "criticalPathDepth": 5,
+          "priority": null,
+          "effort": null
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#688",
+          "rankAtDispatch": 5,
+          "score": 0.5678,
+          "unblockReachAtDispatch": 8,
+          "criticalPathDepth": 5,
+          "priority": null,
+          "effort": null
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "waveId": "M1,M11,M14,M15,M17,M18-GA-Wave-2-2026-06-19T02:15:36.248Z",
+      "milestone": "M1,M11,M14,M15,M17,M18-GA-Wave-2",
+      "dispatchedAt": "2026-06-19T02:15:36.248Z",
+      "weights": {
+        "unblock": 0.5,
+        "cp": 0.3,
+        "prio": 0.15,
+        "effort": 0.05
+      },
+      "candidates": [
+        {
+          "issue": "your-org/business-site-service#33",
+          "rankAtDispatch": 1,
+          "score": 0.924,
+          "unblockReachAtDispatch": 6,
+          "criticalPathDepth": 6,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-site-service#34",
+          "rankAtDispatch": 2,
+          "score": 0.924,
+          "unblockReachAtDispatch": 6,
+          "criticalPathDepth": 6,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-site-service#35",
+          "rankAtDispatch": 3,
+          "score": 0.924,
+          "unblockReachAtDispatch": 6,
+          "criticalPathDepth": 6,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-site-service#36",
+          "rankAtDispatch": 4,
+          "score": 0.924,
+          "unblockReachAtDispatch": 6,
+          "criticalPathDepth": 6,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/curaos-ai-workspace#801",
+          "rankAtDispatch": 5,
+          "score": 0.7907,
+          "unblockReachAtDispatch": 5,
+          "criticalPathDepth": 5,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-workflow-service#27",
+          "rankAtDispatch": 6,
+          "score": 0.7823,
+          "unblockReachAtDispatch": 5,
+          "criticalPathDepth": 5,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-shop-service#24",
+          "rankAtDispatch": 7,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#25",
+          "rankAtDispatch": 8,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#34",
+          "rankAtDispatch": 9,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#35",
+          "rankAtDispatch": 10,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#36",
+          "rankAtDispatch": 11,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#37",
+          "rankAtDispatch": 12,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#38",
+          "rankAtDispatch": 13,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#39",
+          "rankAtDispatch": 14,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#40",
+          "rankAtDispatch": 15,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#41",
+          "rankAtDispatch": 16,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#42",
+          "rankAtDispatch": 17,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#43",
+          "rankAtDispatch": 18,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-site-service#32",
+          "rankAtDispatch": 19,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#13",
+          "rankAtDispatch": 20,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#14",
+          "rankAtDispatch": 21,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#15",
+          "rankAtDispatch": 22,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#16",
+          "rankAtDispatch": 23,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#17",
+          "rankAtDispatch": 24,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#18",
+          "rankAtDispatch": 25,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#19",
+          "rankAtDispatch": 26,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#20",
+          "rankAtDispatch": 27,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#21",
+          "rankAtDispatch": 28,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#22",
+          "rankAtDispatch": 29,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-site-service#29",
+          "rankAtDispatch": 30,
+          "score": 0.649,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-site-service#31",
+          "rankAtDispatch": 31,
+          "score": 0.649,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-workflow-service#25",
+          "rankAtDispatch": 32,
+          "score": 0.649,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/curaos#362",
+          "rankAtDispatch": 33,
+          "score": 0.575,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "Critical",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-donation-service#5",
+          "rankAtDispatch": 34,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#16",
+          "rankAtDispatch": 35,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#17",
+          "rankAtDispatch": 36,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#18",
+          "rankAtDispatch": 37,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#19",
+          "rankAtDispatch": 38,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#20",
+          "rankAtDispatch": 39,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#23",
+          "rankAtDispatch": 40,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#29",
+          "rankAtDispatch": 41,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-workflow-service#16",
+          "rankAtDispatch": 42,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-workflow-service#17",
+          "rankAtDispatch": 43,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#9",
+          "rankAtDispatch": 44,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-calendar-service#4",
+          "rankAtDispatch": 45,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-calendar-service#5",
+          "rankAtDispatch": 46,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/builder-studio#17",
+          "rankAtDispatch": 47,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/builder-studio#18",
+          "rankAtDispatch": 48,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-donation-service#11",
+          "rankAtDispatch": 49,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-donation-service#8",
+          "rankAtDispatch": 50,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-workflow-service#11",
+          "rankAtDispatch": 51,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-workflow-service#15",
+          "rankAtDispatch": 52,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/personal-tracking-service#5",
+          "rankAtDispatch": 53,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/builder-studio#12",
+          "rankAtDispatch": 54,
+          "score": 0.3823,
+          "unblockReachAtDispatch": 2,
+          "criticalPathDepth": 2,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/builder-studio#13",
+          "rankAtDispatch": 55,
+          "score": 0.3823,
+          "unblockReachAtDispatch": 2,
+          "criticalPathDepth": 2,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/builder-studio#14",
+          "rankAtDispatch": 56,
+          "score": 0.3823,
+          "unblockReachAtDispatch": 2,
+          "criticalPathDepth": 2,
+          "priority": "High",
+          "effort": "M"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "waveId": "M1,M11,M14,M15,M17,M18-GA-Wave-2-2026-06-19T08:36:58.407Z",
+      "milestone": "M1,M11,M14,M15,M17,M18-GA-Wave-2",
+      "dispatchedAt": "2026-06-19T08:36:58.407Z",
+      "weights": {
+        "unblock": 0.5,
+        "cp": 0.3,
+        "prio": 0.15,
+        "effort": 0.05
+      },
+      "candidates": [
+        {
+          "issue": "your-org/business-site-service#33",
+          "rankAtDispatch": 1,
+          "score": 0.924,
+          "unblockReachAtDispatch": 6,
+          "criticalPathDepth": 6,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-site-service#34",
+          "rankAtDispatch": 2,
+          "score": 0.924,
+          "unblockReachAtDispatch": 6,
+          "criticalPathDepth": 6,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-site-service#35",
+          "rankAtDispatch": 3,
+          "score": 0.924,
+          "unblockReachAtDispatch": 6,
+          "criticalPathDepth": 6,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-site-service#36",
+          "rankAtDispatch": 4,
+          "score": 0.924,
+          "unblockReachAtDispatch": 6,
+          "criticalPathDepth": 6,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#44",
+          "rankAtDispatch": 5,
+          "score": 0.7907,
+          "unblockReachAtDispatch": 5,
+          "criticalPathDepth": 5,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#46",
+          "rankAtDispatch": 6,
+          "score": 0.7907,
+          "unblockReachAtDispatch": 5,
+          "criticalPathDepth": 5,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-workflow-service#27",
+          "rankAtDispatch": 7,
+          "score": 0.7823,
+          "unblockReachAtDispatch": 5,
+          "criticalPathDepth": 5,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-donation-service#16",
+          "rankAtDispatch": 8,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#24",
+          "rankAtDispatch": 9,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#25",
+          "rankAtDispatch": 10,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#35",
+          "rankAtDispatch": 11,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#37",
+          "rankAtDispatch": 12,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#38",
+          "rankAtDispatch": 13,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#39",
+          "rankAtDispatch": 14,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#40",
+          "rankAtDispatch": 15,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#41",
+          "rankAtDispatch": 16,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#42",
+          "rankAtDispatch": 17,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#43",
+          "rankAtDispatch": 18,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#13",
+          "rankAtDispatch": 19,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#14",
+          "rankAtDispatch": 20,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#15",
+          "rankAtDispatch": 21,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#17",
+          "rankAtDispatch": 22,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#18",
+          "rankAtDispatch": 23,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#19",
+          "rankAtDispatch": 24,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#20",
+          "rankAtDispatch": 25,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#21",
+          "rankAtDispatch": 26,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#22",
+          "rankAtDispatch": 27,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-calendar-service#6",
+          "rankAtDispatch": 28,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-calendar-service#7",
+          "rankAtDispatch": 29,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-calendar-service#8",
+          "rankAtDispatch": 30,
+          "score": 0.6573,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-site-service#29",
+          "rankAtDispatch": 31,
+          "score": 0.649,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-site-service#31",
+          "rankAtDispatch": 32,
+          "score": 0.649,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-workflow-service#18",
+          "rankAtDispatch": 33,
+          "score": 0.649,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-workflow-service#25",
+          "rankAtDispatch": 34,
+          "score": 0.649,
+          "unblockReachAtDispatch": 4,
+          "criticalPathDepth": 4,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/curaos#362",
+          "rankAtDispatch": 35,
+          "score": 0.575,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "Critical",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#16",
+          "rankAtDispatch": 36,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#17",
+          "rankAtDispatch": 37,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#18",
+          "rankAtDispatch": 38,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#19",
+          "rankAtDispatch": 39,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#20",
+          "rankAtDispatch": 40,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#23",
+          "rankAtDispatch": 41,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#27",
+          "rankAtDispatch": 42,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-shop-service#29",
+          "rankAtDispatch": 43,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-workflow-service#16",
+          "rankAtDispatch": 44,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/business-workflow-service#17",
+          "rankAtDispatch": 45,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-automation-service#9",
+          "rankAtDispatch": 46,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/personal-calendar-service#4",
+          "rankAtDispatch": 47,
+          "score": 0.524,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "S"
+        },
+        {
+          "issue": "your-org/builder-studio#17",
+          "rankAtDispatch": 48,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/builder-studio#18",
+          "rankAtDispatch": 49,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-donation-service#11",
+          "rankAtDispatch": 50,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-donation-service#8",
+          "rankAtDispatch": 51,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-workflow-service#11",
+          "rankAtDispatch": 52,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/business-workflow-service#15",
+          "rankAtDispatch": 53,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/personal-tracking-service#5",
+          "rankAtDispatch": 54,
+          "score": 0.5157,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/builder-studio#12",
+          "rankAtDispatch": 55,
+          "score": 0.3823,
+          "unblockReachAtDispatch": 2,
+          "criticalPathDepth": 2,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/builder-studio#13",
+          "rankAtDispatch": 56,
+          "score": 0.3823,
+          "unblockReachAtDispatch": 2,
+          "criticalPathDepth": 2,
+          "priority": "High",
+          "effort": "M"
+        },
+        {
+          "issue": "your-org/builder-studio#14",
+          "rankAtDispatch": 57,
+          "score": 0.3823,
+          "unblockReachAtDispatch": 2,
+          "criticalPathDepth": 2,
+          "priority": "High",
+          "effort": "M"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "waveId": "M18-GA-Wave-2-2026-06-29T17:18:55.286Z",
+      "milestone": "M18-GA-Wave-2",
+      "dispatchedAt": "2026-06-29T17:18:55.286Z",
+      "weights": {
+        "unblock": 0.5,
+        "cp": 0.3,
+        "prio": 0.15,
+        "effort": 0.05
+      },
+      "candidates": [
+        {
+          "issue": "your-org/identity-service#97",
+          "rankAtDispatch": 1,
+          "score": 0.975,
+          "unblockReachAtDispatch": 3,
+          "criticalPathDepth": 3,
+          "priority": "Critical",
+          "effort": "S"
+        }
+      ]
+    }
+  ]
+}

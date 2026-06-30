@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# PR-level notification gate: the single safe sequence every merge surface must
+# run so a PR's inbox notification is cleared ONLY when the PR is genuinely
+# done. This is the per-PR gate (one PR in, one decision out) that
+# pr-verify-merge, milestone-wave, and one-task-execution all call, so the
+# "resolve PRs properly + clear their notification" behavior can't drift
+# between surfaces.
+#
+# Sequence for OWNER/REPO#N:
+#   1. terminal?      PR merged or closed (open -> BLOCK, nothing to clear yet)
+#   2. threads clear? zero UNRESOLVED review threads, UNLESS --allow-unresolved
+#      (then unresolved-but-OUTDATED counts as moot). A live unresolved thread
+#      or any needs-human thread -> BLOCK (exit 3): the caller MUST capture the
+#      finding into a follow-up issue + resolve the thread, THEN re-run.
+#   3. clear:         mark the inbox notification DONE via mark-pr-notification-done.
+#
+# This wraps (does not replace) mark-pr-notification-done: that helper clears
+# the notification; THIS adds the safety predicate (terminal + threads) so a
+# gate caller never clears a notification whose finding is still live.
+#
+# Exit codes:
+#   0  cleared (or already clear / none existed) — safe, done
+#   2  BLOCK: PR not terminal (still open)
+#   3  BLOCK: live unresolved or needs-human thread — capture + resolve first
+#   4  usage / lookup error / GraphQL failure or truncated thread page (fail closed)
+#
+# Usage:
+#   pr-notification-gate [--apply] [--allow-unresolved] OWNER/REPO PR_NUMBER
+#   (dry-run by default: reports the decision, clears nothing)
+set -uo pipefail
+
+APPLY=0
+ALLOW_UNRESOLVED=0
+args=()
+for a in "$@"; do
+  case "$a" in
+    --apply) APPLY=1 ;;
+    --allow-unresolved) ALLOW_UNRESOLVED=1 ;;
+    -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
+    *) args+=("$a") ;;
+  esac
+done
+
+if [ "${#args[@]}" -lt 2 ]; then
+  echo "Usage: pr-notification-gate [--apply] [--allow-unresolved] OWNER/REPO PR_NUMBER" >&2
+  exit 4
+fi
+
+REPO_FULL="${args[0]}"      # Owner/Repo
+PR="${args[1]}"
+OWNER="${REPO_FULL%%/*}"
+REPO="${REPO_FULL#*/}"
+
+gh_api() { env -u GITHUB_TOKEN gh api "$@"; }
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 1. terminal?
+read -r STATE MERGED < <(gh_api "repos/${REPO_FULL}/pulls/${PR}" --jq '"\(.state) \(.merged)"' 2>/dev/null)
+if [ -z "${STATE:-}" ]; then
+  echo "gate: ${REPO_FULL}#${PR} — could not look up PR" >&2
+  exit 4
+fi
+if [ "$STATE" != "closed" ]; then
+  echo "gate: BLOCK ${REPO_FULL}#${PR} — open (not terminal); nothing to clear yet" >&2
+  exit 2
+fi
+
+# 2. threads + needs-human (one GraphQL call). comments(last:10) so a
+# needs-human escalation in a REPLY (not just the opening comment) is seen.
+THREADS_JSON="$(gh_api graphql -f query="{ repository(owner:\"${OWNER}\", name:\"${REPO}\"){ pullRequest(number:${PR}){ reviewThreads(first:100){ pageInfo { hasNextPage } nodes { isResolved isOutdated comments(last:10){ nodes { body }}}}}}}" 2>/dev/null)"
+# Fail closed: a failed GraphQL call (rate-limit, auth, transport) must read as
+# BLOCK, never as "zero unresolved threads" via the ${VAR:-0} coercions below.
+if ! printf '%s' "$THREADS_JSON" | jq -e '.data.repository.pullRequest.reviewThreads' >/dev/null 2>&1; then
+  echo "gate: BLOCK ${REPO_FULL}#${PR} - reviewThreads lookup failed (GraphQL error); not clearing" >&2
+  exit 4
+fi
+HAS_NEXT="$(printf '%s' "$THREADS_JSON" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' 2>/dev/null)"
+if [ "${HAS_NEXT}" != "false" ]; then
+  echo "gate: BLOCK ${REPO_FULL}#${PR} - review threads truncated (hasNextPage=${HAS_NEXT:-null}); not clearing on a partial page" >&2
+  exit 4
+fi
+UNRESOLVED_TOTAL="$(printf '%s' "$THREADS_JSON" | jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)]|length' 2>/dev/null)"
+UNRESOLVED_NONOUTDATED="$(printf '%s' "$THREADS_JSON" | jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false and .isOutdated==false)]|length' 2>/dev/null)"
+NEEDS_HUMAN="$(printf '%s' "$THREADS_JSON" | jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)|select(any(.comments.nodes[]; (.body // "")|test("needs-human|needs human";"i")))]|length' 2>/dev/null)"
+
+if [ "${NEEDS_HUMAN:-0}" -gt 0 ]; then
+  echo "gate: BLOCK ${REPO_FULL}#${PR} — ${NEEDS_HUMAN} needs-human thread(s); leave for human" >&2
+  exit 3
+fi
+
+if [ "$ALLOW_UNRESOLVED" -eq 1 ]; then
+  BLOCKING="${UNRESOLVED_NONOUTDATED:-0}"
+else
+  BLOCKING="${UNRESOLVED_TOTAL:-0}"
+fi
+if [ "${BLOCKING:-0}" -gt 0 ]; then
+  echo "gate: BLOCK ${REPO_FULL}#${PR} — ${BLOCKING} unresolved review thread(s); capture finding into a follow-up issue + resolve the thread, then re-run" >&2
+  exit 3
+fi
+
+# 3. safe — clear the notification via the per-PR helper.
+if [ "$APPLY" -eq 1 ]; then
+  if "$DIR/mark-pr-notification-done" --apply "$REPO_FULL" "$PR" >/dev/null 2>&1; then
+    echo "gate: CLEAR ${REPO_FULL}#${PR} (merged=${MERGED}) — notification marked done" >&2
+    exit 0
+  else
+    echo "gate: WARN ${REPO_FULL}#${PR} — mark-done failed" >&2
+    exit 4
+  fi
+else
+  echo "gate: would-CLEAR ${REPO_FULL}#${PR} (merged=${MERGED}) — terminal + threads clear [DRY-RUN]" >&2
+  exit 0
+fi

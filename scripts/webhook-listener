@@ -1,0 +1,67 @@
+#!/usr/bin/env bun
+// scripts/webhook-listener
+// RP-54: org webhook -> homelab listener entrypoint. Verification pipeline + converger
+// dispatch live in scripts/lib/webhook-listener.js; this file only wires env -> server.
+//
+// Deployment contract (session-30c pattern, documented in docs/agents/webhook-listener.md):
+//   - Caddy terminates TLS on the public vhost and reverse-proxies to this process on
+//     127.0.0.1. This listener NEVER binds a public interface (fail-closed in the lib).
+//   - Webhook registration and secret provisioning are OPERATOR-ONLY runbook steps.
+//     This process never registers webhooks and never calls the GitHub API.
+//
+// Env:
+//   CURAOS_WEBHOOK_SECRET_FILE  preferred: path to the vault-mounted secret file
+//   CURAOS_WEBHOOK_SECRET       fallback: secret value in the process env
+//   CURAOS_WEBHOOK_PORT         default 9444
+//   CURAOS_WEBHOOK_BIND         default 127.0.0.1 (non-loopback refused without explicit override)
+//   CURAOS_WEBHOOK_PATH         default /hooks/curaos-tracker
+//   CURAOS_WEBHOOK_MAX_BODY     default 1048576 bytes
+//   CURAOS_WEBHOOK_WINDOW_SEC   default 300 (replay window)
+
+const listener = require("./lib/webhook-listener.js");
+
+function main() {
+  let secret;
+  try {
+    // Fail-closed: refuse to start on a missing/empty secret. The error message names the
+    // env vars only; it can never contain the secret value.
+    secret = listener.loadSecret();
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`);
+    process.exit(1);
+  }
+
+  const port = Number(process.env.CURAOS_WEBHOOK_PORT || 9444);
+  const bind = process.env.CURAOS_WEBHOOK_BIND || "127.0.0.1";
+  const hookPath = process.env.CURAOS_WEBHOOK_PATH || "/hooks/curaos-tracker";
+  const maxBodyBytes = Number(process.env.CURAOS_WEBHOOK_MAX_BODY || listener.DEFAULT_MAX_BODY_BYTES);
+  const windowSec = Number(process.env.CURAOS_WEBHOOK_WINDOW_SEC || listener.DEFAULT_REPLAY_WINDOW_SEC);
+
+  let server;
+  try {
+    server = listener.createServer({ secret, bind, hookPath, maxBodyBytes, windowSec });
+  } catch (error) {
+    process.stderr.write(`${listener.redactForLog(error.message, secret)}\n`);
+    process.exit(1);
+  }
+
+  server.listen(port, bind, () => {
+    // Startup line: configuration only, never the secret (redaction is belt and braces).
+    const log = listener.makeLogger({ secret });
+    log({
+      action: "startup",
+      decision: "listening",
+      reason: `bind=${bind} port=${port} path=${hookPath} maxBody=${maxBodyBytes} windowSec=${windowSec} events=${listener.ALLOWED_EVENTS.join(",")}`,
+    });
+  });
+
+  const shutdown = () => {
+    server.close(() => process.exit(0));
+    // Hard stop if close hangs on a stuck socket; the systemd/launchd unit restarts us.
+    setTimeout(() => process.exit(0), 5000).unref();
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
+
+main();

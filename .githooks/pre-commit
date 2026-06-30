@@ -1,0 +1,18 @@
+#!/bin/sh
+# Fail-closed hook (RP-01): an unresolvable runner MUST block the commit.
+# Previous lefthook-generated stub fell back to a hardcoded path inside a
+# disposable .claude/worktrees/ checkout and exited 0 when it vanished,
+# silently disabling gitleaks + doc gates.
+# Escape hatch: LEFTHOOK=0 skips (lefthook convention), emergencies only.
+[ "$LEFTHOOK" = "0" ] && exit 0
+if [ -n "$LEFTHOOK_BIN" ]; then
+  exec "$LEFTHOOK_BIN" run pre-commit "$@"
+fi
+if command -v lefthook >/dev/null 2>&1; then
+  exec lefthook run pre-commit "$@"
+fi
+if command -v bun >/dev/null 2>&1; then
+  exec bun x lefthook@2.1.8 run pre-commit "$@"
+fi
+echo "pre-commit: no lefthook runner (set LEFTHOOK_BIN, brew install lefthook, or install bun); failing closed" >&2
+exit 1

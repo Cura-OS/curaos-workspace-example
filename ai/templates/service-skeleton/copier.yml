@@ -1,0 +1,103 @@
+# Copier template for CuraOS service skeleton (per [[curaos-speed-patterns-rule]] DA12).
+# Use: copier copy ai/templates/service-skeleton/ curaos/backend/services/<service-name>/
+# Update existing project from latest template (3-way merge):
+#   copier update --conflict rej curaos/backend/services/<service-name>/
+
+_min_copier_version: "9.4.0"
+_subdirectory: template
+_envops:
+  block_start_string: '[%'
+  block_end_string: '%]'
+  variable_start_string: '[['
+  variable_end_string: ']]'
+  comment_start_string: '[#'
+  comment_end_string: '#]'
+
+service_name:
+  type: str
+  help: Service name (kebab-case; -service suffix auto-added if missing)
+  validator: "{% if not service_name | regex_search('^[a-z][a-z0-9-]*$') %}kebab-case only{% endif %}"
+
+service_kind:
+  type: str
+  help: Service tier
+  choices:
+    - core: "*-core-service (domain primitives)"
+    - personal: "personal-* (individual user flows)"
+    - business: "business-* (org/enterprise flows)"
+    - healthstack: "healthstack-* (clinical PHI overlay)"
+    - educationstack: "educationstack-* (overlay)"
+    - erp: "erp-* (overlay)"
+  default: core
+
+cluster_adr:
+  type: int
+  help: Cluster ADR number (e.g. 200 for identity-party-org-audit; 208 for healthstack-clinical)
+  default: 200
+
+contains_phi:
+  type: bool
+  help: Service handles PHI (HealthStack clinical)? Triggers DB-per-tenant override per [[curaos-postgres-rule]]
+  default: false
+
+scale_topology:
+  type: str
+  help: PG scale topology
+  choices:
+    - citus-distributed: "Citus distributed shared schema sharded by tenant_id (10K+ tenant scale, neutral high-vol)"
+    - db-per-tenant: "DB-per-tenant via CNPG Database CRD (HealthStack PHI only)"
+  default: citus-distributed
+
+orm_choice:
+  type: str
+  help: ORM per [[curaos-orm-rule]]
+  choices:
+    - drizzle: "Drizzle (default; CRUD/most services)"
+    - mikroorm: "MikroORM (HealthStack clinical aggregates only)"
+    - kysely: "Kysely (analytics/escape hatch)"
+  default: drizzle
+
+validation_choice:
+  type: str
+  help: Validation per [[curaos-validation-rule]]
+  choices:
+    - zod: "Zod 4 (default)"
+    - valibot: "Valibot (RN bundle escape)"
+    - arktype: "ArkType (proven hot-path escape)"
+  default: zod
+
+pgbouncer_mode:
+  type: str
+  help: pgBouncer pool mode per [[curaos-postgres-rule]]
+  choices:
+    - transaction: "transaction (default; most apps)"
+    - session: "session (prepared-statement-heavy code)"
+  default: transaction
+
+events_produces:
+  type: yaml
+  help: Kafka events this service produces (list, e.g. ['identity.user.created'])
+  default: []
+
+events_consumes:
+  type: yaml
+  help: Kafka events this service consumes (list)
+  default: []
+
+deployment_profiles:
+  type: yaml
+  help: Deployment profiles supported per AGENTS.md §4
+  default:
+    - cloud
+    - on-prem
+    - hybrid
+    - air-gap
+
+_message_after_copy: |
+  ✓ Service skeleton scaffolded.
+
+  Next steps:
+  1. Create ai/curaos/backend/services/{{ service_name }}/{AGENTS.md,CONTEXT.md,Requirements.md} per [[curaos-agents-md-schema-rule]]
+  2. Add submodule pointer in curaos/.gitmodules if new repo
+  3. Run `bun install` from curaos/ root
+  4. Run `bun run --filter @curaos/{{ service_name }} dev`

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- launchd LaunchAgent template for the inbox-sweep daemon.
+     install-sweep-daemon.sh substitutes @REPO_DIR@ and @BASH@ and copies the
+     result to ~/Library/LaunchAgents/com.curaos.sweep-notifications.plist.
+     StartInterval 900 = every 15 minutes. RunAtLoad fires once on load/login. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.curaos.sweep-notifications</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@BASH@</string>
+        <string>@REPO_DIR@/scripts/sweep-pr-notifications-daemon.sh</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>900</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>@REPO_DIR@/.scratch/sweep-daemon.launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>@REPO_DIR@/.scratch/sweep-daemon.launchd.err</string>
+</dict>
+</plist>

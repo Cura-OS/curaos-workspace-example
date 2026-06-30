@@ -1,0 +1,9 @@
+import { Module } from '@nestjs/common';
+import { TenantModule } from '@curaos/tenancy';
+
+@Module({
+  imports: [TenantModule.forRoot()],
+  controllers: [],
+  providers: [],
+})
+export class AppModule {}

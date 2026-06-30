@@ -1,0 +1,62 @@
+[
+  {
+    "repo": "pocket-id",
+    "license": "BSD 2-Clause",
+    "license_verdict": "PERMISSIVE \u2014 vendor-safe, use in proprietary context allowed",
+    "stack": "Go + Svelte | Fosite (OIDC/OAuth2) + go-webauthn | GORM + PostgreSQL/SQLite | Gin + Svelte Kit"
+  },
+  {
+    "repo": "Zitadel (github.com/zitadel/zitadel)",
+    "license": "AGPL-3.0",
+    "license_verdict": "AGPL/service-boundary: network copyleft; ZITADEL Cloud (SaaS) runs the same code as self-hosted; any modifications to ZITADEL itself must be released. Safe for self-hosted internal usage; API server modifications trigger copyleft. Suitable as reference/documentation; building OWN IdP from patterns (not code reuse) is the path.",
+    "stack": "Go (1.25), connectRPC + gRPC + HTTP/2, PostgreSQL (event-sourced), Protobuf (API-first), SAML 2.0 (crewjam/saml), WebAuthn (descope/virtualwebauthn), Redis (optional), cloud storage (GCS), OpenTelemetry."
+  },
+  {
+    "repo": "keycloak at /Users/dev/workspace/curaos-workspace/external-sources/identity/keycloak",
+    "license": "Apache License 2.0",
+    "license_verdict": "Permissive vendor-friendly. Keycloak is Apache 2.0 \u2014 full source modification + redistribution permitted, trademark warnings only. No service-boundary restriction; can be vendored, embedded, or self-hosted without AGPL/SSPL obligation. Suitable for CuraOS own-IdM as reference architecture or feature-extraction blueprint.",
+    "stack": "Java 17, Maven, Spring/Quarkus (runtime pluggable), PostgreSQL/MySQL/Oracle, Infinispan (distributed sessions), Undertow (servlet container), Jackson (JSON), Bouncy Castle (crypto). Admin UI: React 19 + TypeScript + Vite. Account UI: React 19. JavaScript SDK: TypeScript compiled to NPM. Multi-protocol core: OIDC/OAuth2 (primary), SAML 2.0 (enterprise), DockerAuth, OID4VC (emerging). Distribution: Quarkus native + WildFly classic + Docker image."
+  },
+  {
+    "repo": "authentik at /Users/dev/workspace/curaos-workspace/external-sources/identity/authentik (kind: idp)",
+    "license": "MIT (core); CC BY-SA 4.0 (docs); MIT (client-side JS). Enterprise features under separate license (authentik/enterprise/). Permissive vendor license = reusable.",
+    "license_verdict": "PERMISSIVE (MIT core allows commercial reuse, adaptation, redistribution; enterprise features isolated behind feature flag).",
+    "stack": "Python 3.14 + Django 5.2 + Django REST Framework (backend); TypeScript + Lit 3 + PatternFly 4 (web UI); Go 1.26 (outposts: LDAP/proxy/RAC/RADIUS); Rust 2024-edition (native server components). OpenAPI + generated clients (Go/Rust/TS). PostgreSQL (multi-tenant via django-tenants) + Redis. Channels (ASGI) + Dramatiq (background jobs). Docker/Kubernetes/Helm."
+  },
+  {
+    "repo": "ory-kratos",
+    "license": "Apache-2.0",
+    "license_verdict": "Permissive vendor library. Apache 2.0 is commercial-friendly with no copyleft obligations; can be used, extended, or replaced for proprietary systems without restrictions.",
+    "stack": "Go; HTTP API-first headless identity platform; JSON Schema trait validation; state machine-driven flows; pluggable credential strategies; SQL persistence (PostgreSQL, MySQL, CockroachDB); session management with AAL tracking; email/SMS courier; admin and public REST APIs; extensible hooks."
+  },
+  {
+    "repo": "ory-hydra",
+    "license": "Apache-2.0",
+    "license_verdict": "Permissive vendor (Apache 2.0: free reuse, modification, distribution; can license derivatives proprietarily; no viral copyleft; safe for commercial deployment)",
+    "stack": "Go (v1.23+); OAuth2/OIDC framework (Fosite library); PostgreSQL/MySQL/CockroachDB/SQLite persistence; gRPC + REST APIs; JWT (RS256/HS256/ES256); JWKS management; Kubernetes-native"
+  },
+  {
+    "repo": "ory-keto",
+    "license": "Apache-2.0",
+    "license_verdict": "Permissive \u2014 vendor-grade ReBAC authorization service. Apache-2.0 allows unrestricted use, modification, and commercial deployment. Suitable as reference implementation or embedded service for fine-grained entitlements.",
+    "stack": "Go 1.x (server). Protobuf3 + Connect RPC (gRPC + REST). OpenAPI 3.1 auto-generated. Relation-tuple model implements Google Zanzibar. Ory Permission Language (OPL) = TypeScript/JavaScript subset for namespace + relation + permission definitions. PostgreSQL/MySQL/CockroachDB/SQLite persistence. Prometheus metrics, OpenTelemetry tracing, CORS, gRPC reflection."
+  },
+  {
+    "repo": "logto",
+    "license": "MPL-2.0",
+    "license_verdict": "Permissive (Mozilla Public License 2.0 \u2014 vendor reuse allowed, CuraOS can consume via service boundary if self-hosted; no GPL-style infection to OUR code).",
+    "stack": "TypeScript/Node (Monorepo: packages/core, packages/account, packages/console, packages/experience, packages/schemas, packages/connectors). NestJS-adjacent: Koa+custom libs. ORM: slonik (PostgreSQL). Validation: Zod. Frontend: React + TypeScript."
+  },
+  {
+    "repo": "supertokens-core",
+    "license": "Apache 2.0 (with EE license in ee/ directory)",
+    "license_verdict": "PERMISSIVE (vendor use, open-core with enterprise features under separate license)",
+    "stack": "Java (backend core service) + Plugin Interface Architecture (pluggable storage layers: SQL + NoSQL) + Gradle build + Jakarta Servlet + JSON-over-HTTP REST APIs"
+  },
+  {
+    "repo": "github.com/openfga/openfga",
+    "license": "Apache 2.0",
+    "license_verdict": "Permissive, can be vendored or used as reference. Production-grade.",
+    "stack": "Go (gRPC + HTTP via grpc-gateway, protobuf, OpenTelemetry, Prometheus)"
+  }
+]

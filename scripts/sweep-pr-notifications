@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# Sweep the WHOLE GitHub inbox: clear every PR notification that is
+# `safe-to-clear-notification`, leave every one that genuinely needs a human.
+#
+# This is the DURABLE answer to the recurring "merged-PR notifications pile up"
+# leak. The per-PR `mark-pr-notification-done` clears ONE PR; this script
+# re-scans the entire inbox and applies the safe-to-clear predicate to each PR
+# notification, so a single command drains everything that has gone terminal —
+# regardless of whether the PR was merged through the pr-verify-merge workflow,
+# a direct `gh pr merge`, or the GitHub UI, and regardless of the post-merge
+# `state_change` re-notification. It does NOT depend on an orchestrator
+# remembering to call a clear leg per-PR; run it (or cron it) and the inbox
+# converges.
+#
+# safe-to-clear-notification predicate (a PR notification is cleared iff ALL):
+#   1. terminal state            — PR is merged OR closed (not open)
+#   2. threads resolved-or-moot  — zero UNRESOLVED review threads, UNLESS
+#      --allow-unresolved is passed (then unresolved-but-all-OUTDATED counts as
+#      moot; a non-outdated unresolved thread still blocks). Default: any
+#      unresolved thread blocks (fail-closed — surfaces real findings).
+#   3. no needs-human            - no unresolved thread where any of the last
+#      10 comments marks it escalated (`needs-human` / "needs human").
+#   4. lookup integrity          - the reviewThreads GraphQL call succeeded AND
+#      the thread page is complete (hasNextPage=false); otherwise HELD.
+#
+# Anything that fails the predicate is REPORTED (so a real finding on a merged
+# PR is visible) and LEFT in the inbox. Non-PR notifications are left untouched.
+#
+# Default mode is DRY-RUN (lists what would clear / what is held, deletes
+# nothing). Pass --apply to actually clear.
+#
+# Usage:
+#   sweep-pr-notifications [--apply] [--allow-unresolved]
+#
+# Exit: 0 always (a held notification is not an error — it is the point).
+set -uo pipefail
+
+APPLY=0
+ALLOW_UNRESOLVED=0
+for a in "$@"; do
+  case "$a" in
+    --apply) APPLY=1 ;;
+    --allow-unresolved) ALLOW_UNRESOLVED=1 ;;
+    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $a" >&2; exit 2 ;;
+  esac
+done
+
+gh_api() { env -u GITHUB_TOKEN gh api "$@"; }
+
+OWNER="your-org"
+
+NOTIFS="$(gh_api /notifications --paginate 2>/dev/null)"
+COUNT="$(printf '%s' "$NOTIFS" | jq 'length')"
+echo "inbox: ${COUNT} notification(s)$([ "$APPLY" -eq 0 ] && echo '  [DRY-RUN — pass --apply to clear]')" >&2
+
+CLEARED=0
+HELD=0
+
+# Iterate PR notifications. Fields: thread id, repo, pr number.
+while IFS=$'\t' read -r TID REPO_FULL PR; do
+  [ -z "$TID" ] && continue
+  REPO="${REPO_FULL#${OWNER}/}"
+
+  # 1. terminal state
+  read -r STATE MERGED < <(gh_api "repos/${REPO_FULL}/pulls/${PR}" --jq '"\(.state) \(.merged)"' 2>/dev/null)
+  if [ "$STATE" != "closed" ]; then
+    echo "  HELD  ${REPO}#${PR} — open (not terminal)" >&2
+    HELD=$((HELD+1)); continue
+  fi
+
+  # 2 + 3. threads + needs-human (one GraphQL call). comments(last:10) so a
+  # needs-human escalation in a REPLY (not just the opening comment) is seen.
+  THREADS_JSON="$(gh_api graphql -f query="{ repository(owner:\"${OWNER}\", name:\"${REPO}\"){ pullRequest(number:${PR}){ reviewThreads(first:100){ pageInfo { hasNextPage } nodes { isResolved isOutdated comments(last:10){ nodes { body }}}}}}}" 2>/dev/null)"
+  # Fail closed: a failed GraphQL call (rate-limit, auth, transport) must read
+  # as HELD, never as "zero unresolved threads" via the ${VAR:-0} coercions below.
+  if ! printf '%s' "$THREADS_JSON" | jq -e '.data.repository.pullRequest.reviewThreads' >/dev/null 2>&1; then
+    echo "  HELD  ${REPO}#${PR} - reviewThreads lookup failed (GraphQL error); fail closed" >&2
+    HELD=$((HELD+1)); continue
+  fi
+  HAS_NEXT="$(printf '%s' "$THREADS_JSON" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' 2>/dev/null)"
+  if [ "${HAS_NEXT}" != "false" ]; then
+    echo "  HELD  ${REPO}#${PR} - review threads truncated (hasNextPage=${HAS_NEXT:-null}); fail closed on a partial page" >&2
+    HELD=$((HELD+1)); continue
+  fi
+  UNRESOLVED_TOTAL="$(printf '%s' "$THREADS_JSON" | jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)]|length' 2>/dev/null)"
+  UNRESOLVED_NONOUTDATED="$(printf '%s' "$THREADS_JSON" | jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false and .isOutdated==false)]|length' 2>/dev/null)"
+  NEEDS_HUMAN="$(printf '%s' "$THREADS_JSON" | jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)|select(any(.comments.nodes[]; (.body // "")|test("needs-human|needs human";"i")))]|length' 2>/dev/null)"
+
+  if [ "${NEEDS_HUMAN:-0}" -gt 0 ]; then
+    echo "  HELD  ${REPO}#${PR} — ${NEEDS_HUMAN} needs-human thread(s)" >&2
+    HELD=$((HELD+1)); continue
+  fi
+
+  # Blocking-unresolved count depends on --allow-unresolved:
+  #   default            -> any unresolved thread blocks
+  #   --allow-unresolved -> only NON-outdated unresolved threads block (outdated == moot)
+  if [ "$ALLOW_UNRESOLVED" -eq 1 ]; then
+    BLOCKING="${UNRESOLVED_NONOUTDATED:-0}"
+  else
+    BLOCKING="${UNRESOLVED_TOTAL:-0}"
+  fi
+  if [ "${BLOCKING:-0}" -gt 0 ]; then
+    echo "  HELD  ${REPO}#${PR} — ${BLOCKING} unresolved review thread(s) (merged=${MERGED}); resolve-or-capture before clearing" >&2
+    HELD=$((HELD+1)); continue
+  fi
+
+  # Passes the predicate — clear (or report in dry-run).
+  if [ "$APPLY" -eq 1 ]; then
+    if gh_api --method DELETE "/notifications/threads/${TID}" >/dev/null 2>&1; then
+      echo "  CLEAR ${REPO}#${PR} (merged=${MERGED})" >&2
+      CLEARED=$((CLEARED+1))
+    else
+      echo "  WARN  ${REPO}#${PR} — DELETE failed" >&2
+      HELD=$((HELD+1))
+    fi
+  else
+    echo "  would-CLEAR ${REPO}#${PR} (merged=${MERGED})" >&2
+    CLEARED=$((CLEARED+1))
+  fi
+done < <(printf '%s' "$NOTIFS" | jq -r '.[] | select(.subject.type=="PullRequest") | "\(.id)\t\(.repository.full_name)\t\(.subject.url | split("/") | last)"')
+
+echo "swept: ${CLEARED} $([ "$APPLY" -eq 1 ] && echo cleared || echo would-clear), ${HELD} held" >&2
+exit 0

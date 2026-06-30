@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# Sweep every `CuraOS Roadmap` Project (#2) item whose `CuraOS Milestone`
+# single-select field is UNSET, derive its TRUE milestone deterministically, and
+# (with --apply) set the field. The self-healing converger that backstops the
+# read-only hygiene check `check-roadmap-milestone-fields`.
+#
+# ROOT CAUSE this closes: `check-roadmap-milestone-fields` is a DETECT-only gate
+# (exit 3 lists unset items, mutates nothing) and the §3.4 per-item field-sync
+# only fires for items that flow through the triage gate. Items added by a path
+# that BYPASSES triage - the Project auto-add workflow, a manual `gh project
+# item-add`, a raw `gh issue create`, or simply seeded BEFORE the field existed -
+# land field-less and stay field-less. Before all-open scans, that blocked the
+# next wave (exit 3) and demanded a manual backfill that nobody ran, so the board
+# sat in a permanent would-block state. This is exactly how ~323 of 347 items accumulated with no
+# `CuraOS Milestone` (the entire M1-M15 closed history predated the field-sync).
+# `sweep-foresight-staging` only converges `foresight` items and only reads
+# frontmatter `milestone:` - too narrow to heal the whole board.
+#
+# DERIVATION (deterministic, same signal chain proven correct on the 2026-06-09
+# board backfill - 314 of 323 derived from title+frontmatter+ref, 0 wrong):
+#   1. title `[Mxx]` / `[Mxx-Syy]`        -> Mxx   (the strongest signal)
+#   2. body frontmatter `milestone: Mxx`  -> Mxx
+#   3. first `Mxx-Syy` reference in title+body -> Mxx (owning milestone)
+#   4. bare `Mxx` token in title          -> Mxx
+# An item that matches NONE is REPORTED (not guessed) for the orchestrator to set
+# by parent-epic judgement - the same "converge mechanical, report judgement"
+# split `sweep-foresight-staging` uses for parentless foresight.
+#
+# Default mode is DRY-RUN (lists unset items + their derived milestone, mutates
+# nothing). Pass --apply to set each derived `CuraOS Milestone`.
+#
+# Usage:
+#   sweep-roadmap-milestone-fields [--apply]
+#
+# Exit: 0 when every item is either set or successfully converged; 3 when a
+# dry-run finds an unset item, OR --apply leaves any item underivable (so it
+# reports a roadmap hygiene gap the same way check-roadmap-milestone-fields
+# does; 2 when the item read fills the --limit cap (possible truncation: fail
+# closed, mutate nothing, never converge a partial board).
+set -euo pipefail
+
+APPLY=0
+for a in "$@"; do
+  case "$a" in
+    --apply) APPLY=1 ;;
+    *) echo "unknown arg: $a" >&2; exit 2 ;;
+  esac
+done
+
+# The repo `gh` wrapper injects a narrow-scope token that silently downgrades
+# ProjectV2 reads/writes. Bypass it per-call (same as the sibling convergers).
+gh() { env -u GITHUB_TOKEN command gh "$@"; }
+
+OWNER="your-org"
+PROJECT_TITLE="CuraOS Roadmap"
+MS_FIELD_NAME="CuraOS Milestone"
+
+proj=$(gh project list --owner "$OWNER" --format json 2>/dev/null \
+  | jq -r --arg t "$PROJECT_TITLE" '.projects[] | select(.title==$t) | "\(.number)\t\(.id)"')
+PROJ_NUM=$(printf '%s' "$proj" | cut -f1)
+PROJ_ID=$(printf '%s' "$proj" | cut -f2)
+if [ -z "$PROJ_NUM" ] || [ -z "$PROJ_ID" ]; then
+  echo "could not resolve project '$PROJECT_TITLE' for owner $OWNER" >&2
+  exit 2
+fi
+
+# Field id + the option-id map (name -> id), read live so a re-created field or
+# re-ordered options never stales the converger.
+field_json=$(gh api graphql -f query='
+query($owner:String!,$num:Int!){
+  organization(login:$owner){ projectV2(number:$num){
+    field(name:"'"$MS_FIELD_NAME"'"){ ... on ProjectV2SingleSelectField{ id options{ id name } } }
+  }}
+}' -f owner="$OWNER" -F num="$PROJ_NUM" 2>/dev/null)
+MS_FIELD_ID=$(printf '%s' "$field_json" | jq -r '.data.organization.projectV2.field.id')
+if [ -z "$MS_FIELD_ID" ] || [ "$MS_FIELD_ID" = "null" ]; then
+  echo "could not resolve '$MS_FIELD_NAME' field id" >&2
+  exit 2
+fi
+opt_for() { printf '%s' "$field_json" | jq -r --arg n "$1" '.data.organization.projectV2.field.options[] | select(.name==$n) | .id'; }
+
+# Enumerate ALL items. `gh project item-list` flattens the custom
+# single-select to the key `curaOS Milestone` (space, lower c - verified live).
+# The read is capped by --limit; a full page means the board MAY hold more rows
+# than we fetched, and converging a partial view would silently skip the rest.
+# Fail closed at the cap (RP-07). SWEEP_ITEM_LIMIT is overridable for tests/ops.
+ITEM_LIMIT="${SWEEP_ITEM_LIMIT:-1000}"
+items_json=$(gh project item-list "$PROJ_NUM" --owner "$OWNER" --format json --limit "$ITEM_LIMIT" 2>/dev/null)
+if [ -z "$items_json" ]; then
+  echo "could not list items for project #$PROJ_NUM" >&2
+  exit 2
+fi
+total=$(printf '%s' "$items_json" | jq -r '.items | length')
+if [ "$total" -ge "$ITEM_LIMIT" ]; then
+  echo "sweep-roadmap-milestone-fields: item list filled the --limit $ITEM_LIMIT cap ($total rows): result may be TRUNCATED; refusing to converge a partial board" >&2
+  exit 2
+fi
+
+# Per-item: id, repo, number, title, current milestone.
+unset_tsv=$(printf '%s' "$items_json" | jq -r '
+  .items[]
+  | select(((.["curaOS Milestone"] // "") | tostring) == "")
+  | [ .id, (.content.repository // ""), (.content.number // ""), (.content.title // .title // "") ]
+  | @tsv')
+
+unset_count=$(printf '%s' "$unset_tsv" | grep -c . || true)
+
+if [ "$unset_count" -eq 0 ]; then
+  echo "OK: all $total Project #$PROJ_NUM item(s) carry a CuraOS Milestone value."
+  exit 0
+fi
+
+# Derive milestone from title alone (signals 1 + 4, no API). Returns Mxx or "".
+ms_from_title() {
+  local t="$1"
+  printf '%s' "$t" | grep -oE '\[M[0-9]+(\.[0-9]+)?' | head -1 | tr -d '[' && return 0
+  printf '%s' "$t" | grep -oE '\bM[0-9]+(\.[0-9]+)?-S[0-9]' | head -1 | grep -oE 'M[0-9]+(\.[0-9]+)?' && return 0
+  printf '%s' "$t" | grep -oE '\bM[0-9]+(\.[0-9]+)?\b' | head -1 && return 0
+  printf ''
+}
+# Derive from the issue body (signals 2 + 3) - one API read, only when title fails.
+ms_from_body() {
+  local repo="$1" num="$2"
+  [ -z "$repo" ] || [ -z "$num" ] && { printf ''; return 0; }
+  local body
+  body=$(gh issue view "$num" --repo "$OWNER/$repo" --json body --jq '.body' 2>/dev/null || printf '')
+  printf '%s' "$body" | grep -oiE '^milestone:[[:space:]]*"?M?[0-9]+(\.[0-9]+)?' | head -1 \
+    | grep -oE '[0-9]+(\.[0-9]+)?' | sed 's/^/M/' && return 0
+  printf '%s' "$body" | grep -oE '\bM[0-9]+(\.[0-9]+)?-S[0-9]' | head -1 | grep -oE 'M[0-9]+(\.[0-9]+)?' && return 0
+  printf ''
+}
+
+converged=0
+underivable=()
+echo "$([ "$APPLY" -eq 1 ] && echo APPLY || echo DRY-RUN): $unset_count of $total item(s) have an UNSET CuraOS Milestone"
+while IFS=$'\t' read -r item_id repo num title; do
+  [ -z "$item_id" ] && continue
+  ms=$(ms_from_title "$title")
+  [ -z "$ms" ] && ms=$(ms_from_body "$repo" "$num")
+  ref="${repo:-draft}#${num:-$item_id}"
+  if [ -z "$ms" ]; then
+    underivable+=("$ref :: $title")
+    echo "  UNDERIVABLE $ref  $title"
+    continue
+  fi
+  opt=$(opt_for "$ms")
+  if [ -z "$opt" ] || [ "$opt" = "null" ]; then
+    underivable+=("$ref (derived $ms, no such option) :: $title")
+    echo "  BAD-OPTION  $ref derived=$ms (no matching field option)"
+    continue
+  fi
+  if [ "$APPLY" -eq 1 ]; then
+    gh api graphql -f query='
+      mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){
+        updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){ projectV2Item{ id } }
+      }' -f p="$PROJ_ID" -f i="$item_id" -f f="$MS_FIELD_ID" -f o="$opt" >/dev/null 2>&1 \
+      && { echo "  SET $ref -> $ms"; converged=$((converged+1)); } \
+      || echo "  FAIL-SET $ref -> $ms (mutation error)"
+  else
+    echo "  WOULD-SET $ref -> $ms"
+  fi
+done <<< "$unset_tsv"
+
+if [ "$APPLY" -eq 1 ]; then
+  echo "swept: $converged item(s) backfilled to their derived CuraOS Milestone; ${#underivable[@]} underivable (need parent-epic judgement)"
+else
+  echo "dry-run: $unset_count unset; ${#underivable[@]} underivable"
+fi
+
+# Non-zero whenever a strand remains: dry-run with any unset, or apply that left
+# an underivable item. A clean --apply that converged everything exits 0.
+if [ "$APPLY" -eq 1 ]; then
+  [ "${#underivable[@]}" -gt 0 ] && exit 3 || exit 0
+else
+  exit 3
+fi

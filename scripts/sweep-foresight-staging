@@ -1,0 +1,282 @@
+#!/usr/bin/env bash
+# Sweep every OPEN `foresight` issue and verify it is properly STAGED, not merely
+# labelled. The durable answer to the recurring "foresight issues pile up in the
+# triage inbox" drift.
+#
+# ROOT CAUSE this closes: the §3.4-BARRIER drain-probe treats the mere PRESENCE of
+# the `foresight` label as a complete disposition ("quarantined/parked, does not
+# block the barrier") - it never checks the foresight issue is ACTUALLY staged.
+# So a foresight issue filed by a raw `gh issue create --label foresight,needs-triage`
+# (bypassing the `foresight-capture` workflow, which is what wires Project + milestone
+# + parent) is considered "parked" by every gate, FOREVER - off the board, with no
+# CuraOS Milestone grouping key, and no parent link. It shows in the inbox looking
+# raw while being invisible to triage. That is exactly how #300/#306/#307/#309/#311
+# accumulated (5 off-project, parentless, field-less foresight issues).
+#
+# The invariant: "foresight" is a PARKED disposition, and parked means STAGED -
+#   1. the issue is on the `CuraOS Roadmap` Project, AND
+#   2. its `CuraOS Milestone` field is set (the grouping key - without it the item
+#      falls into the "No Milestone" bucket = effectively untracked), AND
+#   3. its board Status is Backlog (parked, not an active lane), AND
+#   4. it is tree-linked: a native sub-issue under a parent Story/Epic, OR it is an
+#      explicit roadmap root (an Epic itself - type:epic / a milestone Epic).
+# A foresight issue missing ANY of 1-4 is IMPROPERLY PARKED - a strand, not a
+# legitimate disposition. The sibling convergers sweep-closed-issue-labels (LABELS)
+# and sweep-project-status (BOARD STATUS of CLOSED items) handle the close path;
+# this one handles the CAPTURE path for OPEN foresight work.
+#
+# INVERSE STRAND (also handled here): a foresight issue that IS fully staged (1-4 all
+# satisfied) but still carries `needs-triage`. `needs-triage` is correct only at birth,
+# before research/staging finishes; once staging is complete the disposition is decided
+# (parked-foresight) and the label must come off. Leaving it on makes the §3.4-BARRIER
+# drain-probe count the item as UNDRAINED forever (it blocks dispatch on ANY open
+# needs-triage), permanently jamming the wave - even though the staging checks 1-4 pass.
+# This was the M10-debt residue (#316/#318/#319/#320: staged under Epic #24 but never
+# drained). Dry-run flags it; --apply removes needs-triage (keeps foresight + Backlog).
+# The canonical fix is on the capture side (foresight-capture drains as its final step);
+# this sweep is the safety net for raw `gh issue create` items that bypass the workflow.
+#
+# Default mode is DRY-RUN (lists improperly-parked foresight, mutates nothing).
+# Pass --apply to converge: add to Project + stamp CuraOS Milestone (from frontmatter
+# milestone:) + set Status=Backlog. It does NOT invent a parent (tree-linking needs
+# the correct parent Epic, a judgement call) - it REPORTS parentless foresight for
+# the orchestrator to wire, and converges the mechanical Project/field/status gaps.
+#
+# Usage:
+#   sweep-foresight-staging [--apply]
+#
+# Exit: 0 when every open foresight issue is properly staged (or after a successful
+# --apply of the mechanical gaps); 3 when a dry-run finds an improperly-parked
+# foresight issue (so it can gate a wave-done stop-predicate: a non-zero dry-run =
+# "a foresight issue is an off-board/field-less/parentless strand" = NOT wave-done);
+# 2 when any capped read (field-list / item-list / search) fills its --limit
+# (possible truncation: fail closed, mutate nothing) or when the batched parent
+# probe is unavailable/fails (tree-linking unverifiable: fail closed, mutate nothing).
+#
+# READ STRATEGY (RP-41): ONE merged `issue view --json body,labels` per issue, and
+# ONE batched classified parent probe for the WHOLE foresight set via
+# scripts/lib/gh-project.js issueHierarchy() (RP-79: captured-stderr gh wrapper +
+# structured-404 classification, one aliased GraphQL document per <=50 issues,
+# schema-gated by probeIssueHierarchyFields) - never a per-issue GraphQL/REST
+# parent probe.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+APPLY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply) APPLY=1 ;;
+    -h|--help) sed -n '2,55p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+gh() { env -u GITHUB_TOKEN command gh "$@"; }
+
+OWNER="your-org"
+PROJECT_TITLE="CuraOS Roadmap"
+BACKLOG_OPTION_ID="ff47fcf0"   # Status -> Backlog (cached; verified below)
+
+# Resolve project number + node id dynamically (titles stable; numbers vary per org).
+proj=$(gh project list --owner "$OWNER" --format json 2>/dev/null \
+  | jq -r --arg t "$PROJECT_TITLE" '.projects[] | select(.title==$t) | "\(.number)\t\(.id)"')
+PROJ_NUM=$(printf '%s' "$proj" | cut -f1)
+PROJ_ID=$(printf '%s' "$proj" | cut -f2)
+if [ -z "$PROJ_NUM" ] || [ -z "$PROJ_ID" ]; then
+  echo "could not resolve project '$PROJECT_TITLE' for owner $OWNER" >&2
+  exit 2
+fi
+
+# Resolve Status + CuraOS Milestone field ids (and the milestone option map).
+# Every capped read below fails closed when it fills its --limit: a full page
+# means rows past the cap were silently dropped, and sweeping a partial view
+# can false-pass or mis-stage (RP-07). Limits are overridable for tests/ops.
+FIELD_LIMIT="${SWEEP_FIELD_LIMIT:-100}"
+fields=$(gh project field-list "$PROJ_NUM" --owner "$OWNER" --format json --limit "$FIELD_LIMIT" 2>/dev/null)
+field_count=$(printf '%s' "$fields" | jq -r '.fields | length' 2>/dev/null)
+if [ -n "$field_count" ] && [ "$field_count" != "null" ] && [ "$field_count" -ge "$FIELD_LIMIT" ]; then
+  echo "sweep-foresight-staging: field list filled the --limit $FIELD_LIMIT cap ($field_count rows): result may be TRUNCATED; refusing to sweep" >&2
+  exit 2
+fi
+STATUS_FIELD_ID=$(printf '%s' "$fields" | jq -r '.fields[] | select(.name=="Status") | .id')
+BACKLOG_ID=$(printf '%s' "$fields" | jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="Backlog") | .id')
+CM_FIELD_ID=$(printf '%s' "$fields" | jq -r '.fields[] | select(.name=="CuraOS Milestone") | .id')
+if [ -z "$STATUS_FIELD_ID" ] || [ -z "$BACKLOG_ID" ] || [ -z "$CM_FIELD_ID" ]; then
+  echo "could not resolve Status/Backlog/CuraOS Milestone fields on project $PROJ_NUM" >&2
+  exit 2
+fi
+[ "$BACKLOG_ID" != "$BACKLOG_OPTION_ID" ] && BACKLOG_OPTION_ID="$BACKLOG_ID"
+cm_opt() { printf '%s' "$fields" | jq -r --arg m "$1" '.fields[] | select(.name=="CuraOS Milestone") | .options[] | select(.name==$m) | .id'; }
+
+# Build a set of project-member issue keys (repo#num) -> "milestone\tstatus" so we can
+# check membership + fields in one pass without N API calls. Fail closed at the
+# item cap: a truncated member set makes on-project foresight look off-project
+# and --apply would double-add / mis-stage it.
+ITEM_LIMIT="${SWEEP_ITEM_LIMIT:-500}"
+items_json=$(gh project item-list "$PROJ_NUM" --owner "$OWNER" --format json --limit "$ITEM_LIMIT" 2>/dev/null)
+item_count=$(printf '%s' "$items_json" | jq -r '.items | length' 2>/dev/null)
+if [ -z "$item_count" ] || [ "$item_count" = "null" ]; then
+  echo "could not list items for project #$PROJ_NUM" >&2
+  exit 2
+fi
+if [ "$item_count" -ge "$ITEM_LIMIT" ]; then
+  echo "sweep-foresight-staging: item list filled the --limit $ITEM_LIMIT cap ($item_count rows): result may be TRUNCATED; refusing to sweep a partial board" >&2
+  exit 2
+fi
+lookup_tsv() {
+  local wanted="$1"
+  local col="$2"
+  local rows="$3"
+  printf '%s\n' "$rows" | awk -F '\t' -v wanted="$wanted" -v col="$col" '$1 == wanted { print $col; found=1; exit } END { exit found ? 0 : 1 }'
+}
+
+project_rows=$(printf '%s' "$items_json" \
+  | jq -r '.items[] | select(.content.number != null) | "\(.content.repository)#\(.content.number)\t\(.id)\t\(.["curaOS Milestone"] // "")"')
+
+# Enumerate every OPEN issue carrying `foresight`, org-wide. Same fail-closed
+# rule: a full search page can hide foresight strands past the cap.
+SEARCH_LIMIT="${SWEEP_SEARCH_LIMIT:-200}"
+foresight_issues=$(gh search issues --owner "$OWNER" --state open --label foresight \
+  --json repository,number --limit "$SEARCH_LIMIT" --jq '.[] | "\(.repository.nameWithOwner)#\(.number)"')
+search_count=$(printf '%s\n' "$foresight_issues" | grep -c . || true)
+if [ "$search_count" -ge "$SEARCH_LIMIT" ]; then
+  echo "sweep-foresight-staging: foresight search filled the --limit $SEARCH_LIMIT cap ($search_count rows): result may be TRUNCATED; refusing to sweep a partial issue set" >&2
+  exit 2
+fi
+
+# RP-41: ONE batched classified parent probe for the whole foresight set through
+# the RP-79 helper (gh-project.js issueHierarchy: aliased GraphQL document per
+# <=50 issues; captured-stderr + structured-404 classification lives in the lib's
+# gh()/isNotFound(), so no expected-404 stderr noise and no raw `/parent` REST
+# probe here). Fail closed when the hierarchy read is unavailable or fails:
+# without parent data, invariant 4 (tree-linking) cannot be verified and a sweep
+# could false-pass or mis-report parentless strands.
+parent_rows=""
+if [ -n "$foresight_issues" ]; then
+  if ! hierarchy=$(printf '%s\n' "$foresight_issues" | node -e '
+      const fs = require("node:fs");
+      const lib = require(process.argv[1]);
+      const keys = fs.readFileSync(0, "utf8").split("\n").filter(Boolean);
+      if (keys.length === 0) process.exit(0);
+      if (!lib.probeIssueHierarchyFields()) {
+        console.error("Issue.parent/subIssues unavailable on this API surface; cannot verify tree-linking");
+        process.exit(2);
+      }
+      let map;
+      try {
+        map = lib.issueHierarchy(keys.map((k) => {
+          const h = k.lastIndexOf("#");
+          return { repo: k.slice(0, h), number: Number(k.slice(h + 1)) };
+        }));
+      } catch (e) {
+        console.error("batched parent probe failed: " + (e && e.message ? e.message : e));
+        process.exit(2);
+      }
+      for (const k of keys) {
+        const hit = map.get(k);
+        process.stdout.write(k + "\t" + (hit && hit.parent ? hit.parent.number : "") + "\n");
+      }
+    ' "$SCRIPT_DIR/lib/gh-project.js"); then
+    echo "sweep-foresight-staging: batched parent probe failed; refusing to sweep (tree-linking unverifiable)" >&2
+    exit 2
+  fi
+  parent_rows="$hierarchy"
+fi
+
+strands=0
+fixed=0
+parentless_report=()
+stale_triage=0
+drained=0
+
+for key in $foresight_issues; do
+  repo="${key%#*}"; num="${key##*#}"
+  # ONE read per issue (RP-41): body (frontmatter milestone:, type:) + labels
+  # merged into a single --json body,labels call; parent comes from the batched
+  # probe above.
+  view=$(gh issue view "$num" -R "$repo" --json body,labels 2>/dev/null)
+  body=$(printf '%s' "$view" | jq -r '.body // ""' 2>/dev/null)
+  fm_ms=$(printf '%s' "$body" | grep -iE '^milestone:' | head -1 | sed 's/milestone:[[:space:]]*//; s/["'"'"']//g; s/[[:space:]]*$//')
+  is_epic=$(printf '%s' "$body" | grep -iqE '^type:[[:space:]]*epic' && echo 1 || echo 0)
+  parent=$(lookup_tsv "$key" 2 "$parent_rows" || true)
+  has_needs_triage=$(printf '%s' "$view" | jq -r '[(.labels // [])[].name] | if index("needs-triage") then 1 else 0 end' 2>/dev/null)
+
+  problems=()
+  itemid=$(lookup_tsv "$key" 2 "$project_rows" || true)
+  cur_cm=$(lookup_tsv "$key" 3 "$project_rows" || true)
+  on_proj=0
+  [ -n "$itemid" ] && on_proj=1
+  [ "$on_proj" != "1" ] && problems+=("not-on-project")
+  [ -z "$cur_cm" ] && problems+=("no-CuraOS-Milestone")
+  # tree-link: parent set OR it's an Epic root.
+  if [ -z "$parent" ] && [ "$is_epic" != "1" ]; then
+    problems+=("parentless")
+  fi
+
+  # INVERSE STRAND: a FULLY-staged foresight item (no problems) that still carries
+  # `needs-triage` is parked correctly but reads as UNDRAINED to the §3.4-BARRIER
+  # drain-probe (which blocks dispatch on any open needs-triage) - it permanently
+  # jams the wave. Once staging is complete the disposition IS decided (parked-
+  # foresight), so the stale triage label must come off. Drain it (--apply) / flag
+  # it (dry-run). Only when fully staged: an unstaged item keeps needs-triage so the
+  # strand stays visible as off-board/field-less/parentless above.
+  if [ ${#problems[@]} -eq 0 ]; then
+    if [ "$has_needs_triage" = "1" ]; then
+      stale_triage=$((stale_triage+1))
+      if [ "$APPLY" -eq 1 ]; then
+        gh issue edit "$num" -R "$repo" --remove-label needs-triage >/dev/null 2>&1 \
+          && { echo "  DRAIN    $repo#$num - staged + needs-triage removed (parked-foresight)"; drained=$((drained+1)); } \
+          || echo "  FAIL     $repo#$num - could not remove needs-triage" >&2
+      else
+        echo "  stale-needs-triage  $repo#$num - fully staged but still needs-triage (jams §3.4 barrier)"
+      fi
+    fi
+    continue
+  fi
+  strands=$((strands+1))
+  probstr=$(IFS=,; echo "${problems[*]}")
+
+  if [ "$APPLY" -eq 1 ]; then
+    # Converge the MECHANICAL gaps (Project add + milestone + Backlog). Parent wiring
+    # is reported, not auto-invented (needs the right parent Epic - a judgement call).
+      if [ "$on_proj" != "1" ]; then
+      itemid=$(gh project item-add "$PROJ_NUM" --owner "$OWNER" --url "https://github.com/$repo/issues/$num" --format json --jq '.id' 2>/dev/null)
+    fi
+    if [ -n "$itemid" ]; then
+      # stamp Status=Backlog (parked)
+      gh project item-edit --id "$itemid" --project-id "$PROJ_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$BACKLOG_OPTION_ID" >/dev/null 2>&1
+      # stamp CuraOS Milestone from frontmatter, if resolvable
+      if [ -z "$cur_cm" ] && [ -n "$fm_ms" ]; then
+        oid=$(cm_opt "$fm_ms")
+        [ -n "$oid" ] && gh project item-edit --id "$itemid" --project-id "$PROJ_ID" --field-id "$CM_FIELD_ID" --single-select-option-id "$oid" >/dev/null 2>&1
+      fi
+      echo "  STAGE    $repo#$num - fixed: $probstr (milestone=${fm_ms:-UNKNOWN})"
+      fixed=$((fixed+1))
+    else
+      echo "  FAIL     $repo#$num - could not add to project ($probstr)" >&2
+    fi
+  else
+    echo "  improperly-parked  $repo#$num - $probstr (frontmatter milestone=${fm_ms:-UNSET})"
+  fi
+  # parentless always needs orchestrator wiring (not auto-fixable safely)
+  if [[ " ${problems[*]} " == *" parentless "* ]]; then
+    parentless_report+=("$repo#$num (milestone=${fm_ms:-UNSET})")
+  fi
+done
+
+if [ ${#parentless_report[@]} -gt 0 ]; then
+  echo ""
+  echo "PARENTLESS foresight (orchestrator must wire under the correct parent Epic - not auto-fixed):"
+  for p in "${parentless_report[@]}"; do echo "  - $p"; done
+fi
+
+if [ "$APPLY" -eq 1 ]; then
+  echo "swept: $fixed foresight issue(s) staged (Project + milestone + Backlog); $drained drained (stale needs-triage removed); ${#parentless_report[@]} still need parent wiring"
+  # parentless remainder still gates: a foresight strand without a parent is not fully staged
+  [ ${#parentless_report[@]} -gt 0 ] && exit 3 || exit 0
+else
+  echo "dry-run: $strands improperly-parked foresight issue(s) (off-project / no-milestone / parentless); $stale_triage staged-but-stale-needs-triage (jams §3.4 barrier)"
+  { [ "$strands" -gt 0 ] || [ "$stale_triage" -gt 0 ]; } && exit 3 || exit 0
+fi

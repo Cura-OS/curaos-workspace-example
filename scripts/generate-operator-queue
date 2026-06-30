@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# generate-operator-queue: regenerate ai/curaos/docs/OPERATOR-QUEUE.md (RP-52).
+#
+# Builds the operator queue doc from LIVE tracker state: every OPEN issue in
+# the org carrying label `ready-for-human` or `operator-blocked`, each with the
+# exact one-line unblock command. Converts ad hoc mid-execution operator walls
+# (the session-36 GHCR WALL 1 class) into one batched human sitting.
+#
+# Unblock-command resolution order (first hit wins):
+#   1. explicit body line `Unblock: <one-line command>` (or `unblock-command:`)
+#      in the issue body; this convention is the durable mechanism and beats
+#      every heuristic.
+#   2. keyword table: GHCR/packages-scope -> gh auth refresh one-liner;
+#      cosign -> cosign keypair one-liner.
+#   3. fallback: OPEN <issue url> (steps live in the issue body).
+#
+# Refresh hook: the gh-roadmap-mirror workflow regenerates this doc on every
+# mirror pass; manual refresh is just running this script.
+#
+# Fail closed: any tracker read failure, or a truncated search result
+# (incomplete_results=true), exits 70 and leaves the existing doc untouched.
+# A truncated probe is BLOCKED, never "empty" (RP-04/RP-05 lesson).
+#
+# Usage:
+#   generate-operator-queue [--output PATH] [--stdout]
+#     --output PATH  write the doc to PATH (default ai/curaos/docs/OPERATOR-QUEUE.md)
+#     --stdout       print the doc to stdout instead of writing a file
+#
+# Exit: 0 doc written (or printed); 2 usage; 70 tracker read failed/truncated.
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OWNER="your-org"
+OUT="$ROOT/ai/curaos/docs/OPERATOR-QUEUE.md"
+TO_STDOUT=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --output) OUT="$2"; shift ;;
+    --stdout) TO_STDOUT=1 ;;
+    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# Agent shells can carry a narrow GITHUB_TOKEN that lacks org scope. Unset it
+# so gh uses GH_TOKEN or the project-scoped keyring login (workspace pattern).
+gh() { env -u GITHUB_TOKEN command gh "$@"; }
+
+# Exact one-line unblock commands for the known operator-wall classes.
+# write:packages is the session-36 WALL 1; cosign provisioning is operator-only.
+GHCR_CMD='gh auth refresh -h github.com -s write:packages,read:packages && scripts/preflight-credentials'
+COSIGN_CMD='cosign generate-key-pair # then store the pair per the homelab vault runbook'
+
+# One label query. Output: JSON array of pages ({total_count, incomplete_results, items}).
+# GET + --paginate + per_page=100 per the RP-05 lesson (POST search 404s; capped
+# probes silently truncate).
+fetch_label() {
+  local label="$1" raw
+  if ! raw=$(gh api -X GET --paginate --slurp \
+      -f q="org:$OWNER is:issue is:open label:$label" \
+      -f per_page=100 search/issues 2>&1); then
+    echo "generate-operator-queue: gh search read failed for label:$label: $raw" >&2
+    return 70
+  fi
+  if [ "$(printf '%s' "$raw" | jq '[.[] | select(.incomplete_results == true)] | length')" != "0" ]; then
+    echo "generate-operator-queue: search for label:$label returned incomplete_results=true; truncated probe is BLOCKED" >&2
+    return 70
+  fi
+  printf '%s' "$raw" | jq -c '[.[].items[]]'
+}
+
+RFH_JSON="$(fetch_label ready-for-human)" || exit 70
+OPB_JSON="$(fetch_label operator-blocked)" || exit 70
+
+# Merge + dedupe (an issue may carry both labels), then render the finished
+# markdown rows inside jq (a TSV round-trip would re-escape the backslash that
+# pipe-escaping inserts: @tsv emits \\ and `read -r` never unescapes it).
+# clean(): strip CR/LF + tabs, replace em/en dashes (escape-built, never the
+# literal glyphs per curaos_no_em_dash_rule) with "-", escape table pipes.
+ROWS_MD="$(jq -rn \
+  --argjson a "$RFH_JSON" --argjson b "$OPB_JSON" \
+  --arg ghcr "$GHCR_CMD" --arg cosign "$COSIGN_CMD" '
+  def clean:
+    gsub("[\r\n\t]+"; " ") | gsub("\u2014|\u2013"; "-") | gsub("\\|"; "\\|") | gsub("^\\s+|\\s+$"; "");
+  [ ($a + $b) | unique_by(.html_url) | sort_by(.repository_url, .number) | .[]
+    | (.repository_url | sub("^.*/repos/"; "")) as $repo
+    | ((.body // "")) as $body
+    | ([$body | split("\n")[] | capture("^\\s*unblock(?:-command)?\\s*:\\s*(?<cmd>.+)$"; "i")] | (.[0].cmd // "")) as $explicit
+    | ((.title + " " + $body) | ascii_downcase) as $hay
+    | (if ($explicit | length) > 0 then ($explicit | gsub("`"; ""))
+       elif ($hay | test("ghcr|write:packages|read:packages|packages scope|docker push|registry (push|write)|push.*image|publish.*image")) then $ghcr
+       elif ($hay | test("cosign")) then $cosign
+       else "OPEN " + .html_url + " (steps in issue body)"
+       end) as $cmd
+    | "| [" + $repo + "#" + (.number | tostring) + "](" + .html_url + ") | "
+      + (.title | clean) + " | `" + ($cmd | clean) + "` |"
+  ] | to_entries[] | "| " + ((.key + 1) | tostring) + " " + .value
+')" || { echo "generate-operator-queue: row derivation failed" >&2; exit 70; }
+
+RFH_COUNT="$(printf '%s' "$RFH_JSON" | jq 'length')"
+OPB_COUNT="$(printf '%s' "$OPB_JSON" | jq 'length')"
+TOTAL=0
+[ -n "$ROWS_MD" ] && TOTAL="$(printf '%s\n' "$ROWS_MD" | grep -c '^|')"
+STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+TMP_OUT="$(mktemp)"
+trap 'rm -f "$TMP_OUT"' EXIT
+
+{
+  printf '# OPERATOR-QUEUE\n\n'
+  printf 'GENERATED by `scripts/generate-operator-queue`. Do not edit rows by hand; regenerate instead.\n'
+  printf 'Refreshed by the gh-roadmap-mirror workflow on every mirror pass (RP-52).\n\n'
+  printf 'Generated at: %s\n\n' "$STAMP"
+  printf 'Source: OPEN issues labeled `ready-for-human` (%s) or `operator-blocked` (%s) across org %s; deduped total: %s.\n\n' \
+    "$RFH_COUNT" "$OPB_COUNT" "$OWNER" "$TOTAL"
+  printf 'Pin an exact command per issue with a body line `Unblock: <one-line command>`; the generator\n'
+  printf 'prefers it over the built-in keyword table (GHCR scope refresh, cosign keypair).\n\n'
+  if [ "$TOTAL" -eq 0 ]; then
+    printf 'Queue empty: 0 open operator items.\n'
+  else
+    printf '| # | Issue | Title | Unblock command |\n'
+    printf '|---|---|---|---|\n'
+    printf '%s\n' "$ROWS_MD"
+    printf '\nBatch sitting: run the commands top to bottom in one sitting; close or relabel each issue\n'
+    printf 'once its command succeeds (the next mirror pass drops it from this queue).\n'
+  fi
+} > "$TMP_OUT"
+
+if [ "$TO_STDOUT" -eq 1 ]; then
+  cat "$TMP_OUT"
+else
+  mkdir -p "$(dirname "$OUT")"
+  mv "$TMP_OUT" "$OUT"
+  trap - EXIT
+  echo "generate-operator-queue: wrote $OUT ($TOTAL item(s))"
+fi

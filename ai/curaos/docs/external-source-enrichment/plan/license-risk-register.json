@@ -1,0 +1,514 @@
+{
+  "generated_for": "XSRC-EPIC",
+  "phase": "6-legal",
+  "authored_register": [
+    {
+      "source_system": "vista-fhir-codex / fhir-on-vista / docker-vista / vista-m",
+      "license": "Apache-2.0",
+      "distribution_impact": "Permissive; safe to vendor or copy verbatim into our self-hosted multi-tenant SaaS + on-prem + air-gap distribution with attribution. No copyleft on our code. Network-use unrestricted.",
+      "verdict": "safe-to-vendor",
+      "obligations": [
+        "preserve LICENSE + NOTICE files for any copied code",
+        "attribution in NOTICE",
+        "no warranty disclaimer retained"
+      ]
+    },
+    {
+      "source_system": "asrcm / RAPTOR / vista-dashboard-rules / aware / preproc-checklist / avs / maternity-tracker / ehmp-app / pophealth / health-data-standards",
+      "license": "permissive (Apache-2.0 / MIT family)",
+      "distribution_impact": "Permissive; safe to vendor, port-adapt, or run as background service in all CuraOS deployment models. health-data-standards/pophealth Ruby safe to run behind a service boundary with NOTICE. ehmp-app MIT copyable with attribution.",
+      "verdict": "safe-to-vendor",
+      "obligations": [
+        "attribution + NOTICE for copied code (Apache-2.0)",
+        "retain MIT copyright header where MIT code is copied",
+        "license file for any verbatim copy or vendored Ruby lib"
+      ]
+    },
+    {
+      "source_system": "openmrs-fhir2 / openmrs-core / openmrs-rest",
+      "license": "MPL-2.0",
+      "distribution_impact": "File-level (weak) copyleft: any MPL FILE we copy or modify must stay MPL and have source disclosed; mixing into our proprietary service is allowed only at file boundaries. To keep our codebase unencumbered, do NOT copy MPL files; port the PATTERN/data-model as fresh original code instead.",
+      "verdict": "reference-only",
+      "obligations": [
+        "if any MPL file is copied: keep it MPL, disclose source of that file, retain headers",
+        "preferred: pattern-reference-only (port concept, write fresh) to avoid file-level obligations",
+        "legal-review before copying any MPL file"
+      ]
+    },
+    {
+      "source_system": "openmrs-distro-referenceapplication / bahmni-core / suitecrm / suitecrm-core",
+      "license": "AGPL-3.0",
+      "distribution_impact": "Strong network-use copyleft: AGPL requires that users interacting with the software OVER A NETWORK receive the complete corresponding source. For a self-hosted multi-tenant SaaS this would force open-sourcing the entire interacting service. Copying or linking AGPL code is INCOMPATIBLE with our commercial/proprietary distribution. Data-model SHAPES (facts) are not copyrightable and may be referenced.",
+      "verdict": "reference-only",
+      "obligations": [
+        "NEVER copy or link AGPL code into any CuraOS service",
+        "data-model field-set shapes may be mined as facts and re-implemented fresh",
+        "legal-review-required before any use beyond fact-level reference",
+        "document the clean-room boundary in PR"
+      ]
+    },
+    {
+      "source_system": "openemr / openhospital-core / openhospital-api / openhospital-ui / openhospital-gui",
+      "license": "GPL-3.0",
+      "distribution_impact": "Strong copyleft: copying or statically/dynamically linking GPL code forces the combined work under GPL. Incompatible with our proprietary multi-tenant SaaS + on-prem distribution. Standards-defined structures (X12 5010 ANSI segments, CMS-1500/UB-04 government form layouts, FHIR resources) are NOT copyrightable and may be re-implemented. Port LOGIC/data-model as fresh original code only.",
+      "verdict": "reference-only",
+      "obligations": [
+        "NEVER copy GPL source (PHP/Java) verbatim into our codebase",
+        "X12/HCFA/UB-04 are ANSI/government standards - segment+box structure reusable, but implement fresh",
+        "port business logic + data model as original code (clean-room)",
+        "legal-review-required for any structure lifted from GPL source",
+        "document standards-vs-source provenance in PR"
+      ]
+    },
+    {
+      "source_system": "odoo (community addons: account, sale, purchase, project, hr_*, stock, crm, payment)",
+      "license": "LGPL-3.0 (Odoo Community Edition)",
+      "distribution_impact": "Lesser GPL: linking against unmodified LGPL libraries is allowed without copylefting our code, BUT modifications to LGPL files must be released under LGPL, and the LGPL component must remain replaceable. We do NOT consume Odoo as a runtime library (it is Python/monolith); we port its data models + business logic as fresh TS, which avoids LGPL obligations entirely. Odoo Enterprise modules are proprietary (excluded).",
+      "verdict": "reference-only",
+      "obligations": [
+        "do NOT copy LGPL Python files verbatim (would impose LGPL on those files)",
+        "port data models + state machines + logic as original TypeScript (clean-room)",
+        "never reference Odoo Enterprise (proprietary) modules",
+        "legal-review if any LGPL file is copied rather than re-implemented"
+      ]
+    },
+    {
+      "source_system": "erpnext / frappe",
+      "license": "erpnext=GPL-3.0 ; frappe=MIT",
+      "distribution_impact": "frappe (MIT) is permissive: safe to copy with attribution. erpnext (GPL-3.0) is strong copyleft: same constraint as OpenEMR - port logic/data-model as fresh code, do not copy GPL source. The two are split: prefer MIT frappe primitives (AutoRepeat, AssignmentRule, Workflow, report.py, DocType, field-perms, webhook) for any copy; treat erpnext business modules (pricing_rule, subscription, sales/purchase/asset/fiscal) as GPL reference-only port-adapt.",
+      "verdict": "frappe: safe-to-vendor ; erpnext: reference-only",
+      "obligations": [
+        "frappe MIT: retain copyright header + attribution where copied",
+        "erpnext GPL: NEVER copy verbatim; port logic+model as original code",
+        "legal-review for any erpnext structure lifted",
+        "keep the frappe-MIT vs erpnext-GPL provenance explicit per copied unit"
+      ]
+    },
+    {
+      "source_system": "dolibarr",
+      "license": "GPL-3.0",
+      "distribution_impact": "Strong copyleft, same as OpenEMR/erpnext. Facture/contrat/online-signature PHP cannot be copied. Port invoice/contract data-model + state-machine as fresh TS; adopt the signed_status enum + public-sign UX as design patterns (UX is not copyrightable as expression of an interaction concept, but implement fresh).",
+      "verdict": "reference-only",
+      "obligations": [
+        "NEVER copy GPL PHP verbatim",
+        "port data model + state machine as original code",
+        "legal-review for any structure lifted",
+        "document clean-room boundary"
+      ]
+    },
+    {
+      "source_system": "espocrm",
+      "license": "GPL-3.0 (some modules AGPL-3.0)",
+      "distribution_impact": "GPL/AGPL: entityDef field sets and hooks cannot be copied. Mine field-set shapes (Lead/Opportunity/Account/Contact/Case/InboundEmail, probability hook, EntityManager) as data-model facts; re-implement fresh. Any AGPL-flagged module is network-use copyleft = strictly reference-only.",
+      "verdict": "reference-only",
+      "obligations": [
+        "NEVER copy GPL/AGPL code",
+        "data-model field sets as facts re-implemented fresh",
+        "legal-review-required, especially for AGPL modules",
+        "document fact-level vs code boundary"
+      ]
+    },
+    {
+      "source_system": "node-red / activepieces",
+      "license": "node-red=Apache-2.0 ; activepieces=MIT (+ some EE)",
+      "distribution_impact": "Both permissive cores: safe to vendor/port the OSS core (Apache-2.0 / MIT) with attribution. Avoid Activepieces Enterprise Edition (EE) modules which carry a commercial license. Use the OSS connector framework (createPiece), trigger, action, agent/MCP, and registry patterns freely.",
+      "verdict": "safe-to-vendor",
+      "obligations": [
+        "attribution + NOTICE (Apache-2.0 node-red)",
+        "retain MIT header (activepieces core)",
+        "exclude Activepieces EE (commercial) modules - verify per-file license",
+        "legal-review if any EE-licensed file is touched"
+      ]
+    },
+    {
+      "source_system": "windmill",
+      "license": "AGPL-3.0 (+ some EE)",
+      "distribution_impact": "Strong network-use copyleft + EE modules. Copying or linking windmill code into our networked SaaS would force AGPL source disclosure of the interacting service. Use ONLY as a design reference for scheduling/approval/concurrency/secret-backend/fairness patterns; implement fresh.",
+      "verdict": "reference-only",
+      "obligations": [
+        "NEVER copy or link windmill code",
+        "pattern-reference only (concepts, fresh implementation)",
+        "legal-review-required",
+        "exclude any EE-licensed component entirely"
+      ]
+    },
+    {
+      "source_system": "n8n",
+      "license": "Sustainable Use License (source-available, fair-code; NOT OSI-approved)",
+      "distribution_impact": "NOT open-source: the Sustainable Use License restricts commercial/hosted use and embedding; copying n8n code into a commercial multi-tenant SaaS conflicts with the license. Cannot vendor, import, or copy. Usable only as a design reference for expression/pin-data/error-trigger/form-trigger SHAPES, implemented fresh.",
+      "verdict": "legal-review-required",
+      "obligations": [
+        "NEVER copy n8n code or embed n8n",
+        "design-reference only (fresh implementation of concepts)",
+        "legal-review-required before any use",
+        "verify no Sustainable-Use-Licensed file is touched"
+      ]
+    },
+    {
+      "source_system": "FamilyHistoryCPRS",
+      "license": "unknown",
+      "distribution_impact": "License unknown = unknown risk. No code may be used until license is established. Only the data-model concept (which maps to the open FHIR FamilyMemberHistory resource - itself unencumbered) may be referenced, and even that pending confirmation.",
+      "verdict": "legal-review-required",
+      "obligations": [
+        "NO code use of any kind until license confirmed",
+        "implement fresh against open FHIR FamilyMemberHistory (which carries no FamilyHistoryCPRS obligation)",
+        "legal-review-required before any reference beyond the open-FHIR mapping",
+        "flag as critical-blocker if reuse is attempted"
+      ]
+    },
+    {
+      "source_system": "Medusa v2 (@medusajs/*)",
+      "license": "MIT",
+      "distribution_impact": "Permissive; safe to vendor/import as a runtime dependency in commerce-core across all deployment models. Already embedded. No copyleft on our code.",
+      "verdict": "safe-to-vendor",
+      "obligations": [
+        "retain MIT license + attribution",
+        "standard MIT - no further obligation"
+      ]
+    },
+    {
+      "source_system": "local first-party services (esign-core, terminology-service, audit-core, all curaos/* code)",
+      "license": "first-party (CuraOS proprietary)",
+      "distribution_impact": "Our own code; no external license risk. These services already EXCEED their source equivalents (esign eIDAS/UETA, terminology Snowstorm, audit hash-chain) and are reject-inbound - no external code enters.",
+      "verdict": "safe-to-vendor",
+      "obligations": [
+        "none external",
+        "ensure any harvested UX pattern (e.g. Dolibarr signed_status enum) is implemented fresh, not copied"
+      ]
+    }
+  ],
+  "_computed": {
+    "register": [
+      {
+        "system": "bahmni-core",
+        "spdx": "AGPL-3.0",
+        "class": "agpl",
+        "verdict": "service-boundary-only-or-reference",
+        "obligations": "network-use copyleft; source disclosure on network service; cannot link into proprietary/permissive build"
+      },
+      {
+        "system": "espocrm",
+        "spdx": "AGPL-3.0-or-later",
+        "class": "agpl",
+        "verdict": "service-boundary-only-or-reference",
+        "obligations": "network-use copyleft; source disclosure on network service; cannot link into proprietary/permissive build"
+      },
+      {
+        "system": "openmrs-distro-referenceapplication",
+        "spdx": "AGPL-3.0",
+        "class": "agpl",
+        "verdict": "service-boundary-only-or-reference",
+        "obligations": "network-use copyleft; source disclosure on network service; cannot link into proprietary/permissive build"
+      },
+      {
+        "system": "suitecrm",
+        "spdx": "AGPL-3.0-only",
+        "class": "agpl",
+        "verdict": "service-boundary-only-or-reference",
+        "obligations": "network-use copyleft; source disclosure on network service; cannot link into proprietary/permissive build"
+      },
+      {
+        "system": "suitecrm-core",
+        "spdx": "AGPL-3.0-or-later",
+        "class": "agpl",
+        "verdict": "service-boundary-only-or-reference",
+        "obligations": "network-use copyleft; source disclosure on network service; cannot link into proprietary/permissive build"
+      },
+      {
+        "system": "windmill",
+        "spdx": "AGPL-3.0 (backend, frontend core) + Apache-2.0 (clients, OpenAPI) + proprietary (enterprise features)",
+        "class": "agpl",
+        "verdict": "service-boundary-only-or-reference",
+        "obligations": "network-use copyleft; source disclosure on network service; cannot link into proprietary/permissive build"
+      },
+      {
+        "system": "dolibarr",
+        "spdx": "GPL-3.0-or-later",
+        "class": "gpl",
+        "verdict": "port-adapt-or-service-boundary",
+        "obligations": "copyleft; whole-work GPL on distribution; no copy into permissive/proprietary"
+      },
+      {
+        "system": "erpnext",
+        "spdx": "GPL-3.0-only",
+        "class": "gpl",
+        "verdict": "port-adapt-or-service-boundary",
+        "obligations": "copyleft; whole-work GPL on distribution; no copy into permissive/proprietary"
+      },
+      {
+        "system": "odoo",
+        "spdx": "LGPL-3",
+        "class": "gpl",
+        "verdict": "port-adapt-or-service-boundary",
+        "obligations": "copyleft; whole-work GPL on distribution; no copy into permissive/proprietary"
+      },
+      {
+        "system": "openemr",
+        "spdx": "GPL-3.0-or-later",
+        "class": "gpl",
+        "verdict": "port-adapt-or-service-boundary",
+        "obligations": "copyleft; whole-work GPL on distribution; no copy into permissive/proprietary"
+      },
+      {
+        "system": "openhospital-api",
+        "spdx": "GPL-3.0",
+        "class": "gpl",
+        "verdict": "port-adapt-or-service-boundary",
+        "obligations": "copyleft; whole-work GPL on distribution; no copy into permissive/proprietary"
+      },
+      {
+        "system": "openhospital-core",
+        "spdx": "GPL-3.0-or-later",
+        "class": "gpl",
+        "verdict": "port-adapt-or-service-boundary",
+        "obligations": "copyleft; whole-work GPL on distribution; no copy into permissive/proprietary"
+      },
+      {
+        "system": "openhospital-gui",
+        "spdx": "GPL-3.0",
+        "class": "gpl",
+        "verdict": "port-adapt-or-service-boundary",
+        "obligations": "copyleft; whole-work GPL on distribution; no copy into permissive/proprietary"
+      },
+      {
+        "system": "openhospital-ui",
+        "spdx": "GPL-3.0",
+        "class": "gpl",
+        "verdict": "port-adapt-or-service-boundary",
+        "obligations": "copyleft; whole-work GPL on distribution; no copy into permissive/proprietary"
+      },
+      {
+        "system": "openmrs-core",
+        "spdx": "MPL-2.0",
+        "class": "mpl",
+        "verdict": "port-adapt-with-file-notice",
+        "obligations": "file-level copyleft; modified MPL files stay MPL+disclosed; can combine with other licenses"
+      },
+      {
+        "system": "openmrs-fhir2",
+        "spdx": "MPL-2.0",
+        "class": "mpl",
+        "verdict": "port-adapt-with-file-notice",
+        "obligations": "file-level copyleft; modified MPL files stay MPL+disclosed; can combine with other licenses"
+      },
+      {
+        "system": "openmrs-rest",
+        "spdx": "MPL-2.0",
+        "class": "mpl",
+        "verdict": "port-adapt-with-file-notice",
+        "obligations": "file-level copyleft; modified MPL files stay MPL+disclosed; can combine with other licenses"
+      },
+      {
+        "system": "Frappe",
+        "spdx": "MIT",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "RAPTOR (Radiology Protocol Tool Recorder)",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "activepieces",
+        "spdx": "MIT",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "asrcm",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "avs",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "aware",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "coms",
+        "spdx": "ISC",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "docker-vista",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "ehmp-app",
+        "spdx": "MIT",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "fhir-on-vista",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "health-data-standards (projectcypress)",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "maternity-tracker",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "node-red",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "pophealth",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "preproc-checklist",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "vista-dashboard-rules",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "vista-fhir-codex (VistA-FHIR-Server-Codex)",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "vista-fhir-loader",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "vista-m",
+        "spdx": "Apache-2.0",
+        "class": "permissive",
+        "verdict": "safe-to-vendor-or-copy",
+        "obligations": "attribution + NOTICE retention"
+      },
+      {
+        "system": "n8n-ref",
+        "spdx": "LicenseRef-n8n-sustainable-use",
+        "class": "source-available",
+        "verdict": "reference-only",
+        "obligations": "NOT OSI; usage restrictions; no code reuse; reference-only"
+      },
+      {
+        "system": "daily-plan",
+        "spdx": "unknown",
+        "class": "unknown",
+        "verdict": "legal-review-required",
+        "obligations": "NO grant; all rights reserved until confirmed"
+      },
+      {
+        "system": "https://github.com/VHAINNOVATIONS/FamilyHistoryCPRS",
+        "spdx": "unknown",
+        "class": "unknown",
+        "verdict": "legal-review-required",
+        "obligations": "NO grant; all rights reserved until confirmed"
+      },
+      {
+        "system": "vista-vehu",
+        "spdx": "unknown",
+        "class": "unknown",
+        "verdict": "legal-review-required",
+        "obligations": "NO grant; all rights reserved until confirmed"
+      }
+    ],
+    "summary": {
+      "safe_to_copy": [
+        "Frappe",
+        "RAPTOR (Radiology Protocol Tool Recorder)",
+        "activepieces",
+        "asrcm",
+        "avs",
+        "aware",
+        "coms",
+        "docker-vista",
+        "ehmp-app",
+        "fhir-on-vista",
+        "health-data-standards (projectcypress)",
+        "maternity-tracker",
+        "node-red",
+        "pophealth",
+        "preproc-checklist",
+        "vista-dashboard-rules",
+        "vista-fhir-codex (VistA-FHIR-Server-Codex)",
+        "vista-fhir-loader",
+        "vista-m"
+      ],
+      "service_or_reference_only": [
+        "bahmni-core",
+        "espocrm",
+        "openmrs-distro-referenceapplication",
+        "suitecrm",
+        "suitecrm-core",
+        "windmill",
+        "n8n-ref"
+      ],
+      "port_adapt_no_copy": [
+        "dolibarr",
+        "erpnext",
+        "odoo",
+        "openemr",
+        "openhospital-api",
+        "openhospital-core",
+        "openhospital-gui",
+        "openhospital-ui",
+        "openmrs-core",
+        "openmrs-fhir2",
+        "openmrs-rest"
+      ],
+      "legal_review_required": [
+        "daily-plan",
+        "https://github.com/VHAINNOVATIONS/FamilyHistoryCPRS",
+        "vista-vehu"
+      ]
+    }
+  }
+}

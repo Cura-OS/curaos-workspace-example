@@ -1,0 +1,181 @@
+{
+  "$schema": "https://schemas.curaos.dev/cbcf/v1.json",
+  "id": "identity.hosted-login",
+  "version": "1.0.0",
+  "metadata": {
+    "name": "Identity — Hosted Login",
+    "description": "Builder composition for the hosted login + admin enrollment experience.",
+    "tags": [
+      "identity",
+      "login"
+    ],
+    "tenantScope": "tenant",
+    "owner": "builder-studio"
+  },
+  "environment": {
+    "renderTargets": [
+      "flutter:web",
+      "flutter:desktop",
+      "flutter:mobile"
+    ],
+    "devMode": {
+      "skipAuth": true,
+      "assumedIdentity": "admin",
+      "assumedTenant": "sandbox"
+    }
+  },
+  "components": [
+    {
+      "id": "cmp_login_header",
+      "key": "ui.layout.section.header",
+      "props": {
+        "title": "Welcome to CuraOS",
+        "subtitle": "Sign in or accept your admin invitation."
+      }
+    },
+    {
+      "id": "cmp_invite_form",
+      "key": "ui.form.identity.invitation",
+      "props": {
+        "showTenantField": true
+      },
+      "bindings": {
+        "input": {
+          "type": "localState",
+          "ref": "inviteForm"
+        },
+        "output": {
+          "type": "localState",
+          "ref": "inviteForm"
+        }
+      }
+    },
+    {
+      "id": "cmp_mfa_panel",
+      "key": "ui.form.identity.mfa-setup",
+      "props": {
+        "otpProvider": "totp"
+      },
+      "bindings": {
+        "input": {
+          "type": "service",
+          "ref": "identity.mfa.challenge"
+        },
+        "output": {
+          "type": "service",
+          "ref": "identity.mfa.complete"
+        }
+      }
+    },
+    {
+      "id": "cmp_notifications",
+      "key": "ui.feedback.inline-messages"
+    }
+  ],
+  "layouts": [
+    {
+      "id": "layout_login",
+      "type": "page",
+      "title": "Hosted Login",
+      "children": [
+        {
+          "ref": "cmp_login_header"
+        },
+        {
+          "ref": "cmp_invite_form"
+        },
+        {
+          "ref": "cmp_mfa_panel",
+          "condition": {
+            "language": "cel",
+            "expression": "state.inviteForm.status == 'verified'"
+          }
+        },
+        {
+          "ref": "cmp_notifications"
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "path": "/",
+      "layout": "layout_login",
+      "title": "Admin Sign-In",
+      "guards": [
+        {
+          "type": "devMode"
+        }
+      ]
+    },
+    {
+      "path": "/complete",
+      "layout": "layout_login",
+      "title": "Enrollment Complete"
+    }
+  ],
+  "bindings": {
+    "queries": [
+      {
+        "id": "fetchInvitation",
+        "type": "rest",
+        "ref": "GET /api/identity/invitations/{{inviteCode}}",
+        "cachePolicy": "network-first"
+      }
+    ],
+    "mutations": [
+      {
+        "id": "acceptInvitation",
+        "type": "rest",
+        "ref": "POST /api/identity/invitations/accept",
+        "inputMapping": {
+          "code": "{{state.inviteForm.code}}",
+          "password": "{{state.inviteForm.password}}"
+        },
+        "onSuccess": [
+          {
+            "type": "updateState",
+            "target": "inviteForm.status",
+            "payload": {
+              "value": "verified"
+            }
+          },
+          {
+            "type": "navigate",
+            "target": "/complete"
+          }
+        ],
+        "onError": [
+          {
+            "type": "emitEvent",
+            "target": "notify.inline",
+            "payload": {
+              "level": "error",
+              "message": "Invitation verification failed."
+            }
+          }
+        ]
+      }
+    ],
+    "connectors": [
+      {
+        "id": "auditEmitter",
+        "connectorKey": "automation.kafka.producer",
+        "inputs": {
+          "topic": "identity.audit",
+          "payload": "{{workflow.outputs.auditRef}}"
+        }
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "cfdlRef": "identity.admin-enrollment@1.0.0",
+      "taskId": "user_task_profile",
+      "form": "cmp_invite_form",
+      "options": {
+        "autoLaunch": true
+      }
+    }
+  ]
+}

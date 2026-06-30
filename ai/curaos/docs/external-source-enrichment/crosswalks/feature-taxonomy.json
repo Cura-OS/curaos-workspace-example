@@ -1,0 +1,56 @@
+{
+  "generated_for": "XSRC-EPIC",
+  "purpose": "Neutral cross-domain feature taxonomy. Mapping keys for source-to-local-map, gap-analysis, crosswalks. Each leaf gets a stable id <domain>.<group>.<feature>.",
+  "domains": {
+    "healthcare": {
+      "registration": ["patient-registration", "patient-demographics", "patient-search", "patient-portal-phr", "family-history", "consent"],
+      "scheduling": ["appointment-scheduling", "provider-scheduling", "room-resource-scheduling", "queue-waiting-room", "triage"],
+      "encounter": ["encounter-management", "clinical-notes", "problems", "diagnoses-icd", "procedures-cpt-hcpcs", "vitals", "after-visit-summary"],
+      "orders": ["orders", "labs", "lab-information-system", "radiology", "dicom-pacs", "critical-result-followup"],
+      "medications": ["pharmacy", "medication-administration", "prescriptions", "allergies"],
+      "care": ["care-plans", "referrals", "immunizations", "maternity-care", "surgery-procedure-checklist", "clinical-decision-support", "rules-engine", "alerts"],
+      "inpatient": ["admissions-discharge-transfer", "ward-bed-management"],
+      "revenue": ["healthcare-billing", "insurance-claims", "eligibility", "revenue-cycle"],
+      "ancillary": ["medical-inventory-stock", "documents-attachments", "public-health-reporting"],
+      "interop": ["fhir", "hl7", "snomed-loinc-terminology"],
+      "platform": ["audit-trails", "rbac-clinical-roles", "departmental-apps", "reports-dashboards", "offline-low-resource"]
+    },
+    "erp": {
+      "accounting": ["general-ledger", "accounts-receivable", "accounts-payable", "invoicing", "payments", "taxes", "bank-reconciliation", "journals", "chart-of-accounts"],
+      "trade": ["sales", "purchasing", "procurement", "quotes", "pricing", "discounts"],
+      "supply": ["inventory", "warehouse", "manufacturing", "bom", "mrp", "pos"],
+      "web": ["ecommerce", "website"],
+      "delivery": ["projects", "tasks", "timesheets"],
+      "people": ["hr", "payroll", "expenses", "assets"],
+      "recurring": ["contracts", "subscriptions", "renewals", "billing-schedules"],
+      "catalog": ["products-services"],
+      "multi": ["multi-company", "multi-currency", "localization"],
+      "platform": ["reporting", "dashboards", "documents", "email-templates", "notifications", "approval-workflows", "integrations"]
+    },
+    "crm-insurance-broker": {
+      "sales": ["leads", "contacts", "accounts", "households", "organizations", "opportunities", "pipelines", "quotes", "proposals"],
+      "policy": ["policies", "policy-terms", "policy-renewals", "carriers-insurers", "coverage-lines", "premium-schedules", "installments", "endorsements", "beneficiaries"],
+      "broker": ["brokers-producers", "broker-hierarchy", "commissions", "commission-splits", "multi-level-contracts"],
+      "claims": ["claims", "claim-followup"],
+      "service": ["cases-tickets", "activities", "calls-meetings", "email-sync", "notes", "tasks", "reminders", "renewal-alerts", "customer-service"],
+      "compliance": ["kyc-compliance", "documents"],
+      "platform": ["reporting", "dashboards", "role-based-access", "audit-logging"]
+    },
+    "workflow-automation": {
+      "authoring": ["visual-workflow-editor", "low-code-nocode-builder", "developer-code-workflow", "embedded-runtime", "external-service-mode", "test-simulation-mode", "workflow-versioning"],
+      "catalog": ["trigger-catalog", "action-catalog", "connectors", "script-steps", "ai-llm-steps", "mcp-tooling-integration"],
+      "human": ["human-approval-steps", "forms"],
+      "execution": ["long-running-workflows", "event-driven-flows", "job-queue", "cron-schedules", "webhooks", "api-triggered-workflows"],
+      "resilience": ["error-handling", "retry-policies", "timeouts", "compensation-rollback", "state-persistence"],
+      "ops": ["deployment-model", "secrets-management", "rbac", "audit-logs", "observability"]
+    }
+  },
+  "curaos_cross_cutting": {
+    "comment": "CuraOS-specific axes every external feature must be scored against (per workspace rules).",
+    "triad_layer": ["neutral-core", "personal", "business", "healthstack-overlay", "education-overlay"],
+    "local_vs_3rdparty": ["first-party-self-hosted", "byo-provider-integration"],
+    "generator_first_target": ["contract-typespec", "asyncapi-event", "sdk-package", "codegen-template", "codegen-emitter", "service", "frontend-app", "ui-kit-component"],
+    "geospatial": ["maps", "tiles", "spatial-bindings", "fleet-tracking", "location"],
+    "builder_bpm": ["bpm-workflow-core", "app-site-builder", "automation-core"]
+  }
+}

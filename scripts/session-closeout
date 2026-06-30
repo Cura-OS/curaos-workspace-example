@@ -1,0 +1,804 @@
+#!/usr/bin/env bash
+# session-closeout: checklist-as-code session stop-state gate (remediation RP-13).
+#
+# Every step runs; any failing step marks the checklist red and the script
+# exits nonzero. A session is closed ONLY when this script exits 0. This is
+# the standing owner of the HANDOVER frontmatter schema validation (recurring,
+# every run, not only at the one-time RP-13 rewrite).
+#
+# Steps:
+#   1. gh-roadmap-mirror (dry_run:false): regenerate ISSUE-ROADMAP.md + refresh
+#      HANDOVER.md from live tracker state (tracker is the source of truth).
+#   2. Corroborate the mirror's self-reported booleans against reality:
+#      content hash before/after + `git diff --name-only`. A reported update
+#      with no actual edit = silent failure; an unreported edit = truth defect.
+#   3. Converger dry-runs, all four: sweep-closed-issue-labels,
+#      sweep-project-status, sweep-foresight-staging,
+#      sweep-roadmap-milestone-fields. Exit 3 (drift) or 2 (truncation) = FAIL.
+#   4. backfill-calibration-outcome.js --latest. "no matching record" means
+#      nothing is pending backfill (pass); any other failure = FAIL. Then the
+#      calibration DATA PATH is verified (RP-47): the calibration log must be
+#      parseable with a well-formed records[] array; null priority/effort
+#      capture on the latest record is surfaced as a note (the capture fix
+#      lives in wave-prioritize; history keeps nulls, so the note never gates).
+#   5. HANDOVER freshness: HANDOVER.md mtime must NOT predate the newest
+#      merged-PR timestamp across the org (a stale stop-state doc is the
+#      session-28 failure mode; fail closed when the probe cannot run).
+#   6. HANDOVER.md contract (EVERY run): YAML frontmatter with goal, branch,
+#      head_sha, active_issues[], blockers[], decisions[], next_action;
+#      <=150 lines total; ISSUE-ROADMAP.md carries its "Generated at <ISO>"
+#      stamp; ai/curaos/docs/README.md carries its "## Current state" pointer
+#      block (RP-24 stale-state-doc guard).
+#   7. Memory merge/SHA claim verification (RP-28): memory topic files
+#      modified within the claim window are scanned for merged-PR claims;
+#      every repo-qualified claim is re-verified via gh (state must be
+#      MERGED); bare "#N merged" claims without a repo qualifier FAIL
+#      (unverifiable; the local-ci-pivot "#202 merged" fiction class); SHA
+#      claims on synced/pointer/main lines must resolve in a local repo.
+#      MEMORY.md itself is exempt (it is the index; topic files are the
+#      entries of record). Fails closed on cap-reached.
+#   8. Memory index completeness (RP-28): every memory/*.md topic file must
+#      be referenced from MEMORY.md.
+#   9. LESSON-mining sweep (RP-45): memory topic files are grepped for
+#      `LESSON:`/`ROOT CAUSE:` lines; each lesson not yet in the register's
+#      mined-lesson ledger appends a candidate row to
+#      ai/curaos/docs/RISK-REGISTER.md (Guard = NONE candidate, needs review)
+#      and a ledger entry (the ledger is the dedupe store: one row per lesson,
+#      ever). A missing register fails closed.
+#  10. Register aging sweep (RP-45): register rows whose Guard cell starts
+#      with the literal `NONE` (the documented parsing contract) and whose
+#      Last recurrence is aged (session-NN rows: current session - NN >=
+#      AGE_SESSIONS; date rows: older than AGE_DAYS) emit a foresight-capture
+#      payload (dry_run:true) instead of filing live issues, per
+#      [[curaos-foresight-rule]] (GRILL-009: the full capture flow, never a
+#      bare `gh issue create`). The payload is written to FORESIGHT_DIR and
+#      its staging invariants are ASSERTED as dry-run evidence: labels
+#      needs-triage+foresight, NO ready-for-agent, Project Status=Backlog,
+#      target version set only when known, parent linkage only when a parent
+#      exists, dry_run:true. The row's Guard cell is stamped
+#      `[foresight-payload-emitted <date>]` so a second run files nothing.
+#      Routing the payload (agent-workflow-kit workflow-run foresight-capture)
+#      is the orchestrator's next action; this gate never creates issues.
+#  11. Knowledge drift (RP-61): scripts/check-knowledge-drift.sh reconciles
+#      AGENTS section-15 rule slugs vs ai/rules/, memory milestone-state
+#      claims vs GitHub Epic states, and HANDOVER head_sha vs actual HEAD.
+#      Nonzero = FAIL (a missing drift script also fails closed).
+#  12. ISSUE-ROADMAP deterministic render (RP-53):
+#      scripts/render-issue-roadmap.js regenerates ISSUE-ROADMAP.md from the
+#      SHARED board snapshot (scripts/lib/gh-project.js boardSnapshot, RP-38;
+#      consumed read-only) and stamps a fresh "Generated at <ISO>" line.
+#      Render failure, a missing renderer, or a lost stamp = FAIL.
+#  13. RESOLUTION-MAP milestone-trigger sweep (RP-53):
+#      scripts/sweep-resolution-map.js emits the past-due DEFERRED-MILESTONE
+#      checklist (rows whose trigger milestone is already completed, or that
+#      carry no explicit M-key). Advisory on count (deferrals are resolved by
+#      humans/agents over time, never silently); FAILS closed when the map or
+#      the sweep script is missing or the sweep cannot parse the map.
+#
+# Usage: session-closeout [--skip-mirror]
+#   --skip-mirror   skip steps 1-2 (ONLY for environments without an agent
+#                   harness; every other gate still runs and still fails
+#                   closed).
+#
+# Env overrides (test fixtures + non-default layouts):
+#   SESSION_CLOSEOUT_WS          workspace root (default: this script's parent)
+#   SESSION_CLOSEOUT_SCRIPTS     dir holding the convergers + backfill script
+#                                (default: $WS/scripts)
+#   SESSION_CLOSEOUT_ORG         GitHub org for the merged-PR freshness probe
+#                                + repo-only claim qualification
+#                                (default: your-org)
+#   SESSION_CLOSEOUT_NODE        node binary (default: node)
+#   SESSION_CLOSEOUT_MIRROR_CMD  full mirror command (default:
+#                                agent-workflow-kit workflow-run
+#                                gh-roadmap-mirror --args-json
+#                                '{"dry_run":false}' --json)
+#   SESSION_CLOSEOUT_MEMORY_DIR  auto-memory dir (default:
+#                                $HOME/.claude/projects/<dashed $WS>/memory;
+#                                missing dir = steps 7-8 vacuously pass)
+#   SESSION_CLOSEOUT_MEMORY_WINDOW_HOURS  claim-scan window for "new" memory
+#                                entries (default: 48)
+#   SESSION_CLOSEOUT_CLAIM_CAP   max distinct gh claim verifications per run;
+#                                exceeding the cap FAILS closed (default: 25)
+#   SESSION_CLOSEOUT_SHA_REPOS   colon-separated git dirs SHA claims may
+#                                resolve in (default: $WS:$WS/curaos)
+#   SESSION_CLOSEOUT_RISK_REGISTER  risk register path (default:
+#                                $WS/ai/curaos/docs/RISK-REGISTER.md)
+#   SESSION_CLOSEOUT_FORESIGHT_DIR  foresight payload output dir (default:
+#                                $WS/.scratch/foresight-payloads; payloads are
+#                                TRANSIENT by design: the durable dedupe record
+#                                is the register stamp and the full invocation
+#                                is echoed to stdout, the session log)
+#   SESSION_CLOSEOUT_SESSION     current session number for session-NN aging
+#                                (default: max session-NN in memory topic
+#                                filenames; underivable = session-form aging
+#                                skipped with a note)
+#   SESSION_CLOSEOUT_RISK_AGE_SESSIONS  guard=NONE aging threshold in sessions
+#                                (default: 3, per the register protocol)
+#   SESSION_CLOSEOUT_RISK_AGE_DAYS  aging threshold for date-form Last
+#                                recurrence cells (default: 21)
+#   SESSION_CLOSEOUT_FORESIGHT_PARENT  owner/repo#N parent for emitted
+#                                foresight observations (default: none; tree
+#                                linkage applies only when a parent exists)
+#   SESSION_CLOSEOUT_FORESIGHT_TARGET_VERSION  target version stamped on
+#                                emitted payloads when known (default: absent)
+#   SESSION_CLOSEOUT_DRIFT_SCRIPT  knowledge-drift gate script (default:
+#                                $SCRIPTS/check-knowledge-drift.sh)
+#   SESSION_CLOSEOUT_SNAPSHOT    board snapshot file for the step-12 render;
+#                                when set the render runs --offline against it
+#                                (zero network calls; test fixtures). Unset =
+#                                the shared snapshot via the lib TTL.
+#   SESSION_CLOSEOUT_ROADMAP_RENDER  renderer script (default:
+#                                <this script's dir>/render-issue-roadmap.js)
+#   SESSION_CLOSEOUT_RESOLUTION_MAP  RESOLUTION-MAP path (default:
+#                                $WS/ai/curaos/docs/adr/RESOLUTION-MAP.md)
+#   SESSION_CLOSEOUT_RESMAP_SWEEP  sweep script (default:
+#                                <this script's dir>/sweep-resolution-map.js)
+#   SESSION_CLOSEOUT_RESMAP_CHECKLIST  checklist artifact path (default:
+#                                $WS/.scratch/resolution-map-pastdue.md)
+#   SESSION_CLOSEOUT_RESMAP_COMPLETED  highest completed milestone number for
+#                                the past-due classification (default: 15)
+#
+# Exit: 0 = session closed clean; 1 = checklist failure(s); 2 = usage/env error.
+set -uo pipefail
+
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WS="${SESSION_CLOSEOUT_WS:-$(cd "$SELF_DIR/.." && pwd)}"
+SCRIPTS="${SESSION_CLOSEOUT_SCRIPTS:-$WS/scripts}"
+ORG="${SESSION_CLOSEOUT_ORG:-your-org}"
+NODE_BIN="${SESSION_CLOSEOUT_NODE:-node}"
+HANDOVER="$WS/ai/curaos/docs/HANDOVER.md"
+ROADMAP="$WS/ai/curaos/docs/ISSUE-ROADMAP.md"
+DOCS_README="$WS/ai/curaos/docs/README.md"
+HANDOVER_REL="ai/curaos/docs/HANDOVER.md"
+ROADMAP_REL="ai/curaos/docs/ISSUE-ROADMAP.md"
+MEMORY_DIR="${SESSION_CLOSEOUT_MEMORY_DIR:-$HOME/.claude/projects/$(printf '%s' "$WS" | tr '/' '-')/memory}"
+MEMORY_WINDOW_HOURS="${SESSION_CLOSEOUT_MEMORY_WINDOW_HOURS:-48}"
+CLAIM_CAP="${SESSION_CLOSEOUT_CLAIM_CAP:-25}"
+SHA_REPOS="${SESSION_CLOSEOUT_SHA_REPOS:-$WS:$WS/curaos}"
+CAL_LOG="$SCRIPTS/lib/dep-graph-calibration-log.json"
+RISK_REGISTER="${SESSION_CLOSEOUT_RISK_REGISTER:-$WS/ai/curaos/docs/RISK-REGISTER.md}"
+FORESIGHT_DIR="${SESSION_CLOSEOUT_FORESIGHT_DIR:-$WS/.scratch/foresight-payloads}"
+RISK_AGE_SESSIONS="${SESSION_CLOSEOUT_RISK_AGE_SESSIONS:-3}"
+RISK_AGE_DAYS="${SESSION_CLOSEOUT_RISK_AGE_DAYS:-21}"
+FORESIGHT_PARENT="${SESSION_CLOSEOUT_FORESIGHT_PARENT:-}"
+FORESIGHT_TARGET_VERSION="${SESSION_CLOSEOUT_FORESIGHT_TARGET_VERSION:-}"
+CONVERGERS="sweep-closed-issue-labels sweep-project-status sweep-foresight-staging sweep-roadmap-milestone-fields"
+REQUIRED_SCALARS="goal branch head_sha next_action"
+REQUIRED_LISTS="active_issues blockers decisions"
+MAX_HANDOVER_LINES=150
+
+SKIP_MIRROR=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --skip-mirror) SKIP_MIRROR=1 ;;
+    -h|--help) sed -n '2,/^# Exit:/p' "$0"; exit 0 ;;
+    *) echo "session-closeout: unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+[ -f "$HANDOVER" ] || { echo "session-closeout: missing $HANDOVER" >&2; exit 2; }
+[ -f "$ROADMAP" ] || { echo "session-closeout: missing $ROADMAP" >&2; exit 2; }
+command -v "$NODE_BIN" >/dev/null 2>&1 || { echo "session-closeout: node binary not found ($NODE_BIN)" >&2; exit 2; }
+
+FAILS=0
+pass() { printf 'ok    %s\n' "$1"; }
+fail() { FAILS=$((FAILS + 1)); printf 'FAIL  %s\n' "$1"; }
+note() { printf 'note  %s\n' "$1"; }
+
+hash_of() { cksum "$1" 2>/dev/null | awk '{ print $1 "-" $2 }'; }
+
+mtime_of() {
+  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null
+}
+
+iso_to_epoch() {
+  "$NODE_BIN" -e '
+    const t = Date.parse(process.argv[1]);
+    if (Number.isNaN(t)) process.exit(1);
+    process.stdout.write(String(Math.floor(t / 1000)));
+  ' "$1"
+}
+
+# Deep-scan the mirror harness output for the two self-report booleans; the
+# runner envelope shape is not contracted, the workflow output keys are.
+parse_mirror_flags() {
+  "$NODE_BIN" -e '
+    const fs = require("node:fs");
+    const raw = fs.readFileSync(process.argv[1], "utf8");
+    let doc = null;
+    try { doc = JSON.parse(raw); } catch {
+      const start = raw.indexOf("{");
+      const end = raw.lastIndexOf("}");
+      if (start !== -1 && end > start) {
+        try { doc = JSON.parse(raw.slice(start, end + 1)); } catch {}
+      }
+    }
+    const found = {};
+    (function walk(v) {
+      if (!v || typeof v !== "object") return;
+      for (const [k, val] of Object.entries(v)) {
+        if ((k === "issue_roadmap_updated" || k === "handover_updated")
+            && typeof val === "boolean" && !(k in found)) found[k] = val;
+        walk(val);
+      }
+    })(doc);
+    if (!("issue_roadmap_updated" in found) || !("handover_updated" in found)) process.exit(1);
+    process.stdout.write(`${found.issue_roadmap_updated} ${found.handover_updated}`);
+  ' "$1"
+}
+
+# reported(true|false) pre-hash post-hash rel-path label
+corroborate_mirror_file() {
+  local reported="$1" pre="$2" post="$3" relpath="$4" label="$5"
+  if [ "$reported" = "true" ]; then
+    if [ "$pre" = "$post" ]; then
+      fail "step 2: mirror reported $label updated but $relpath content is unchanged (self-report not corroborated)"
+      return
+    fi
+    if git -C "$WS" diff --name-only 2>/dev/null | grep -Fxq "$relpath"; then
+      pass "step 2: mirror edit of $relpath corroborated (hash changed + present in git diff --name-only)"
+    else
+      fail "step 2: mirror reported $label updated but $relpath is absent from git diff --name-only"
+    fi
+  else
+    if [ "$pre" = "$post" ]; then
+      pass "step 2: mirror reported $label unchanged and $relpath is untouched"
+    else
+      fail "step 2: mirror edited $relpath but reported $label=false (self-report truth defect)"
+    fi
+  fi
+}
+
+echo "=== session-closeout checklist ==="
+
+# --- Step 1 + 2: roadmap mirror + corroboration -----------------------------
+MIRROR_RAN=0
+if [ "$SKIP_MIRROR" = "1" ]; then
+  note "step 1: gh-roadmap-mirror SKIPPED (--skip-mirror); steps 1-2 not gating this run"
+else
+  PRE_ROADMAP="$(hash_of "$ROADMAP")"
+  PRE_HANDOVER="$(hash_of "$HANDOVER")"
+  MIRROR_OUT="$(mktemp)"
+  MIRROR_CMD="${SESSION_CLOSEOUT_MIRROR_CMD:-agent-workflow-kit workflow-run gh-roadmap-mirror --args-json '{\"dry_run\":false}' --json}"
+  if bash -c "$MIRROR_CMD" >"$MIRROR_OUT" 2>&1; then
+    MIRROR_RAN=1
+    pass "step 1: gh-roadmap-mirror run completed"
+  else
+    fail "step 1: gh-roadmap-mirror run failed: $(tail -3 "$MIRROR_OUT" | tr '\n' ' ')"
+  fi
+  if [ "$MIRROR_RAN" = "1" ]; then
+    if FLAGS="$(parse_mirror_flags "$MIRROR_OUT")"; then
+      ROADMAP_UPDATED="${FLAGS%% *}"
+      HANDOVER_UPDATED="${FLAGS##* }"
+      POST_ROADMAP="$(hash_of "$ROADMAP")"
+      POST_HANDOVER="$(hash_of "$HANDOVER")"
+      corroborate_mirror_file "$ROADMAP_UPDATED" "$PRE_ROADMAP" "$POST_ROADMAP" "$ROADMAP_REL" "issue_roadmap_updated"
+      corroborate_mirror_file "$HANDOVER_UPDATED" "$PRE_HANDOVER" "$POST_HANDOVER" "$HANDOVER_REL" "handover_updated"
+    else
+      fail "step 2: mirror output carries no issue_roadmap_updated/handover_updated booleans (cannot corroborate)"
+    fi
+  else
+    note "step 2: corroboration skipped (mirror run failed)"
+  fi
+  rm -f "$MIRROR_OUT"
+fi
+
+# --- Step 3: converger dry-runs ----------------------------------------------
+for conv in $CONVERGERS; do
+  CONV_PATH="$SCRIPTS/$conv"
+  if [ ! -f "$CONV_PATH" ]; then
+    fail "step 3: converger missing: $CONV_PATH"
+    continue
+  fi
+  CONV_OUT="$(bash "$CONV_PATH" 2>&1)"
+  CONV_RC=$?
+  case "$CONV_RC" in
+    0) pass "step 3: $conv dry-run clean" ;;
+    3) fail "step 3: $conv dry-run reports DRIFT (exit 3): $(printf '%s' "$CONV_OUT" | tail -2 | tr '\n' ' ')" ;;
+    2) fail "step 3: $conv dry-run reports possible TRUNCATION (exit 2): $(printf '%s' "$CONV_OUT" | tail -2 | tr '\n' ' ')" ;;
+    *) fail "step 3: $conv dry-run failed (exit $CONV_RC): $(printf '%s' "$CONV_OUT" | tail -2 | tr '\n' ' ')" ;;
+  esac
+done
+
+# --- Step 4: calibration outcome backfill ------------------------------------
+BACKFILL="$SCRIPTS/backfill-calibration-outcome.js"
+if [ ! -f "$BACKFILL" ]; then
+  fail "step 4: missing $BACKFILL"
+else
+  BF_OUT="$("$NODE_BIN" "$BACKFILL" --latest 2>&1)"
+  BF_RC=$?
+  if [ "$BF_RC" -eq 0 ]; then
+    pass "step 4: calibration outcome backfilled"
+  elif printf '%s' "$BF_OUT" | grep -q "no matching record"; then
+    pass "step 4: no calibration record pending backfill"
+  else
+    fail "step 4: backfill-calibration-outcome failed (exit $BF_RC): $(printf '%s' "$BF_OUT" | tail -2 | tr '\n' ' ')"
+  fi
+fi
+
+# Step 4b (RP-47 data path): the calibration log must be structurally sound so
+# dispatch records actually reach analyze(); null priority/effort capture is
+# surfaced (note, never gating: pre-fix history carries nulls by design).
+if [ ! -f "$CAL_LOG" ]; then
+  note "step 4: no calibration log at $CAL_LOG (nothing dispatched yet); data-path check vacuously satisfied"
+else
+  CAL_OUT="$("$NODE_BIN" -e '
+    const fs = require("node:fs");
+    let log;
+    try { log = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); }
+    catch (e) { console.error(`unparseable: ${e.message}`); process.exit(3); }
+    if (!log || !Array.isArray(log.records)) { console.error("malformed: records[] missing"); process.exit(3); }
+    for (let i = 0; i < log.records.length; i++) {
+      const r = log.records[i];
+      if (!r || typeof r !== "object" || !Array.isArray(r.candidates) || !r.waveId || !r.dispatchedAt) {
+        console.error(`malformed: records[${i}] lacks waveId/dispatchedAt/candidates[]`); process.exit(3);
+      }
+    }
+    const latest = [...log.records].sort((a, b) => String(a.dispatchedAt).localeCompare(String(b.dispatchedAt))).pop();
+    if (!latest) { console.log("empty"); process.exit(0); }
+    const nulls = latest.candidates.filter((c) => c.priority == null || c.effort == null).length;
+    console.log(`latest=${latest.waveId} nulls=${nulls}/${latest.candidates.length}`);
+  ' "$CAL_LOG" 2>&1)"
+  CAL_RC=$?
+  if [ "$CAL_RC" -ne 0 ]; then
+    fail "step 4: calibration log data path BROKEN ($CAL_LOG): $(printf '%s' "$CAL_OUT" | tail -1)"
+  else
+    pass "step 4: calibration log structurally sound ($CAL_OUT)"
+    case "$CAL_OUT" in
+      *" nulls=0/"*) : ;;
+      *nulls=*) note "step 4: latest calibration record carries null priority/effort ($CAL_OUT); the capture fix is the wave-prioritize deterministic frontmatter backfill (RP-47)" ;;
+    esac
+  fi
+fi
+
+# --- Step 5: HANDOVER freshness vs newest merged PR --------------------------
+MERGED_AT="$(env -u GITHUB_TOKEN gh search prs --owner "$ORG" --merged --sort updated --order desc \
+  --limit 50 --json closedAt --jq 'map(.closedAt) | max // empty' 2>&1)"
+MERGED_RC=$?
+if [ "$MERGED_RC" -ne 0 ]; then
+  fail "step 5: merged-PR probe failed (cannot verify HANDOVER freshness, failing closed): $(printf '%s' "$MERGED_AT" | tail -1)"
+elif [ -z "$MERGED_AT" ]; then
+  pass "step 5: no merged PR found in org $ORG (freshness vacuously satisfied)"
+else
+  MERGED_EPOCH="$(iso_to_epoch "$MERGED_AT")" || MERGED_EPOCH=""
+  HANDOVER_EPOCH="$(mtime_of "$HANDOVER")"
+  if [ -z "$MERGED_EPOCH" ] || [ -z "$HANDOVER_EPOCH" ]; then
+    fail "step 5: could not compare timestamps (merged_at=$MERGED_AT mtime=$HANDOVER_EPOCH), failing closed"
+  elif [ "$HANDOVER_EPOCH" -lt "$MERGED_EPOCH" ]; then
+    fail "step 5: HANDOVER.md is STALE: mtime predates newest merged PR ($MERGED_AT); overwrite it for this session per the L1 contract"
+  else
+    pass "step 5: HANDOVER.md is fresh (mtime >= newest merged PR $MERGED_AT)"
+  fi
+fi
+
+# --- Step 6: HANDOVER frontmatter schema + caps + roadmap stamp --------------
+FM=""
+if [ "$(sed -n '1p' "$HANDOVER")" != "---" ]; then
+  fail "step 6: HANDOVER.md does not start with a YAML frontmatter block (--- on line 1)"
+elif ! awk 'NR > 1 && /^---$/ { found = 1; exit } END { exit !found }' "$HANDOVER"; then
+  fail "step 6: HANDOVER.md frontmatter block is never closed (no second --- line)"
+else
+  FM="$(awk 'NR == 1 { next } /^---$/ { exit } { print }' "$HANDOVER")"
+  for key in $REQUIRED_SCALARS; do
+    if printf '%s\n' "$FM" | grep -Eq "^${key}:[[:space:]]*[^[:space:]]"; then
+      pass "step 6: frontmatter key present: $key"
+    else
+      fail "step 6: frontmatter missing required key (or empty value): $key"
+    fi
+  done
+  for key in $REQUIRED_LISTS; do
+    LINE="$(printf '%s\n' "$FM" | grep -E "^${key}:" | head -1)"
+    if [ -z "$LINE" ]; then
+      fail "step 6: frontmatter missing required list key: $key"
+      continue
+    fi
+    INLINE="$(printf '%s' "$LINE" | sed -E "s/^${key}:[[:space:]]*//")"
+    if [ -n "$INLINE" ]; then
+      case "$INLINE" in
+        \[*) pass "step 6: frontmatter list present: $key" ;;
+        *) fail "step 6: frontmatter key $key must be a list ([] or block items), got: $INLINE" ;;
+      esac
+    elif printf '%s\n' "$FM" | awk -v k="$key" '
+        seen && /^[^[:space:]]/ { exit !ok }
+        $0 ~ "^" k ":" { seen = 1; next }
+        seen && /^[[:space:]]+-[[:space:]]/ { ok = 1 }
+        END { exit !ok }'; then
+      pass "step 6: frontmatter list present: $key"
+    else
+      fail "step 6: frontmatter list key $key has no items (use $key: [] when empty)"
+    fi
+  done
+fi
+LINES="$(wc -l < "$HANDOVER" | tr -d ' ')"
+if [ "$LINES" -le "$MAX_HANDOVER_LINES" ]; then
+  pass "step 6: HANDOVER.md within the ${MAX_HANDOVER_LINES}-line cap ($LINES lines)"
+else
+  fail "step 6: HANDOVER.md exceeds the ${MAX_HANDOVER_LINES}-line cap ($LINES lines); it is accreting again, overwrite it"
+fi
+if grep -Eq '^Generated at [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$ROADMAP"; then
+  pass "step 6: ISSUE-ROADMAP.md carries its Generated at stamp"
+else
+  fail "step 6: ISSUE-ROADMAP.md is missing its 'Generated at <ISO>' stamp line"
+fi
+# RP-24 stale-state-doc guard: the docs index must keep its standing pointer
+# block at live execution state (HANDOVER + tracker win over static docs).
+if [ -f "$DOCS_README" ] && grep -Eq '^## Current state' "$DOCS_README"; then
+  pass "step 6: docs README carries its '## Current state' pointer block"
+else
+  fail "step 6: $DOCS_README is missing its '## Current state' pointer block (RP-24 stale-state-doc guard)"
+fi
+
+# --- Step 7: memory merge/SHA claim verification (RP-28) ----------------------
+# Topic files modified within the claim window are scanned; MEMORY.md (the
+# index) is exempt - topic files are the entries of record, and index summary
+# lines re-touch historical claims every session (guaranteed false positives).
+if [ ! -d "$MEMORY_DIR" ]; then
+  note "step 7: memory dir not found ($MEMORY_DIR); claim verification vacuously satisfied"
+else
+  NOW_EPOCH="$(date +%s)"
+  WINDOW_S=$((MEMORY_WINDOW_HOURS * 3600))
+  CLAIM_LIST="$(mktemp)"
+  SHA_LIST="$(mktemp)"
+  BARE_FAILS=0
+  SCANNED=0
+  for mf in "$MEMORY_DIR"/*.md; do
+    [ -e "$mf" ] || continue
+    [ "$(basename "$mf")" = "MEMORY.md" ] && continue
+    MF_EPOCH="$(mtime_of "$mf")" || continue
+    [ -n "$MF_EPOCH" ] || continue
+    [ $((NOW_EPOCH - MF_EPOCH)) -le "$WINDOW_S" ] || continue
+    SCANNED=$((SCANNED + 1))
+    # merged-PR claims: every line mentioning a merge
+    while IFS= read -r line; do
+      # bare "#N" with no repo qualifier = unverifiable merge claim = FAIL
+      if printf '%s\n' "$line" | grep -Eq '(^|[^A-Za-z0-9._/-])#[0-9]+'; then
+        BARE_FAILS=$((BARE_FAILS + 1))
+        fail "step 7: bare merge claim in $(basename "$mf") (qualify as <repo>#<n> or <owner>/<repo>#<n>; cite same-turn command output): $(printf '%.120s' "$line")"
+      fi
+      printf '%s\n' "$line" | grep -oE '[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?#[0-9]+' >> "$CLAIM_LIST" || true
+    done < <(grep -ih 'merged' "$mf" 2>/dev/null || true)
+    # SHA claims: hex tokens on synced/pointer/main lines (must contain a-f to
+    # exclude pure-decimal runs like dates)
+    grep -iE '(^|[^[:alnum:]])(synced|pointer|main)([^[:alnum:]]|$)' "$mf" 2>/dev/null \
+      | grep -oE '[0-9a-f]{7,40}' >> "$SHA_LIST" || true
+  done
+  CLAIMS="$(sort -u "$CLAIM_LIST")"
+  SHAS="$(sort -u "$SHA_LIST" | grep '[a-f]' || true)"
+  rm -f "$CLAIM_LIST" "$SHA_LIST"
+  CLAIM_COUNT=0
+  [ -n "$CLAIMS" ] && CLAIM_COUNT="$(printf '%s\n' "$CLAIMS" | grep -c .)"
+  if [ "$CLAIM_COUNT" -gt "$CLAIM_CAP" ]; then
+    fail "step 7: $CLAIM_COUNT distinct merge claims exceed the cap ($CLAIM_CAP); cannot verify all, failing closed (raise SESSION_CLOSEOUT_CLAIM_CAP only deliberately)"
+  elif [ "$CLAIM_COUNT" -gt 0 ]; then
+    while IFS= read -r ref; do
+      [ -n "$ref" ] || continue
+      NUM="${ref##*#}"
+      REPO="${ref%#*}"
+      case "$REPO" in
+        */*) FULL="$REPO" ;;
+        *)   FULL="$ORG/$REPO" ;;
+      esac
+      PR_STATE="$(env -u GITHUB_TOKEN gh pr view "$NUM" --repo "$FULL" --json state --jq .state 2>&1)"
+      PR_RC=$?
+      if [ "$PR_RC" -ne 0 ]; then
+        fail "step 7: merge claim $FULL#$NUM could not be verified (gh: $(printf '%.80s' "$PR_STATE")); fabricated or imprecise claim, failing closed"
+      elif [ "$PR_STATE" = "MERGED" ]; then
+        pass "step 7: merge claim $FULL#$NUM verified MERGED"
+      else
+        fail "step 7: merge claim $FULL#$NUM is NOT merged (state=$PR_STATE); the local-ci-pivot '#202 merged' fiction class"
+      fi
+    done <<EOF_CLAIMS
+$CLAIMS
+EOF_CLAIMS
+  fi
+  if [ -n "$SHAS" ]; then
+    while IFS= read -r sha; do
+      [ -n "$sha" ] || continue
+      FOUND=0
+      OLD_IFS="$IFS"; IFS=':'
+      for repo_dir in $SHA_REPOS; do
+        [ -d "$repo_dir" ] || continue
+        if git -C "$repo_dir" cat-file -e "$sha^{commit}" 2>/dev/null; then FOUND=1; break; fi
+      done
+      IFS="$OLD_IFS"
+      if [ "$FOUND" = "1" ]; then
+        pass "step 7: SHA claim $sha resolves in a local repo"
+      else
+        fail "step 7: SHA claim $sha resolves in NO local repo ($SHA_REPOS); stale or fabricated state claim"
+      fi
+    done <<EOF_SHAS
+$SHAS
+EOF_SHAS
+  fi
+  if [ "$SCANNED" -eq 0 ]; then
+    note "step 7: no memory topic file modified within ${MEMORY_WINDOW_HOURS}h; claim verification vacuously satisfied"
+  elif [ "$CLAIM_COUNT" -eq 0 ] && [ -z "$SHAS" ] && [ "$BARE_FAILS" -eq 0 ]; then
+    pass "step 7: $SCANNED new memory topic file(s) carry no merge/SHA claims"
+  fi
+fi
+
+# --- Step 8: memory index completeness (RP-28) --------------------------------
+if [ ! -d "$MEMORY_DIR" ]; then
+  note "step 8: memory dir not found ($MEMORY_DIR); index completeness vacuously satisfied"
+elif [ ! -f "$MEMORY_DIR/MEMORY.md" ]; then
+  fail "step 8: $MEMORY_DIR/MEMORY.md missing; memory index cannot be checked, failing closed"
+else
+  UNREFERENCED=""
+  for mf in "$MEMORY_DIR"/*.md; do
+    [ -e "$mf" ] || continue
+    BASE="$(basename "$mf")"
+    [ "$BASE" = "MEMORY.md" ] && continue
+    grep -Fq "$BASE" "$MEMORY_DIR/MEMORY.md" || UNREFERENCED="$UNREFERENCED $BASE"
+  done
+  if [ -z "$UNREFERENCED" ]; then
+    pass "step 8: every memory topic file is referenced from MEMORY.md"
+  else
+    fail "step 8: memory file(s) unreferenced from MEMORY.md (index incomplete):$UNREFERENCED"
+  fi
+fi
+
+# --- Step 9: LESSON-mining sweep into the risk register (RP-45) ---------------
+# Memory topic files are the lesson source of record; the register's mined-
+# lesson ledger (HTML comments at file end) is the dedupe store, so each
+# lesson line feeds the register at most once, ever, regardless of how rows
+# get rephrased by review.
+if [ ! -f "$RISK_REGISTER" ]; then
+  fail "step 9: risk register missing ($RISK_REGISTER); the lesson-mining sweep has no destination, failing closed"
+elif [ ! -d "$MEMORY_DIR" ]; then
+  note "step 9: memory dir not found ($MEMORY_DIR); lesson mining vacuously satisfied"
+else
+  MINE_OUT="$("$NODE_BIN" -e '
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const crypto = require("node:crypto");
+    const [registerPath, memoryDir, today] = process.argv.slice(1);
+    const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    // Output sanitizer: the register must stay table-safe and free of em/en
+    // dashes (U+2014/U+2013, escaped here per the no-dash rule itself).
+    const clean = (s) => s.replace(/[\u2014\u2013]/g, "-").replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+    let register = fs.readFileSync(registerPath, "utf8");
+    const ledger = new Set();
+    for (const m of register.matchAll(/<!-- mined-lesson ([0-9a-f]{12}) /g)) ledger.add(m[1]);
+    const candidates = [];
+    for (const f of fs.readdirSync(memoryDir).filter((f) => f.endsWith(".md")).sort()) {
+      if (f === "MEMORY.md") continue;
+      const lines = fs.readFileSync(path.join(memoryDir, f), "utf8").split("\n");
+      for (const line of lines) {
+        const m = line.match(/\b(?:LESSONS?|ROOT CAUSE)\s*:\s*(.+)/i);
+        if (!m) continue;
+        const text = clean(m[1]);
+        const key = norm(text);
+        if (key.length < 12) continue; // noise guard: bare markers carry no lesson
+        const hash = crypto.createHash("sha1").update(key).digest("hex").slice(0, 12);
+        if (ledger.has(hash)) continue;
+        ledger.add(hash);
+        candidates.push({ hash, file: f, text: text.length > 160 ? `${text.slice(0, 157)}...` : text });
+      }
+    }
+    if (!candidates.length) { console.log("added=0"); process.exit(0); }
+    let nextId = 0;
+    for (const m of register.matchAll(/\bRR-(\d+)\b/g)) nextId = Math.max(nextId, Number(m[1]));
+    const regLines = register.split("\n");
+    let lastRow = -1;
+    for (let i = 0; i < regLines.length; i++) if (/^\| RR-\d+ \|/.test(regLines[i])) lastRow = i;
+    if (lastRow === -1) { console.error("register table has no RR rows; cannot append"); process.exit(3); }
+    const rows = [];
+    const ledgerLines = [];
+    const ids = [];
+    for (const c of candidates) {
+      nextId += 1;
+      const id = `RR-${String(nextId).padStart(2, "0")}`;
+      ids.push(id);
+      rows.push(`| ${id} | ${c.text} | auto-mined from memory/${c.file} (RP-45 sweep) | NONE (candidate: auto-mined, needs review + guard decision) | ${today} |`);
+      ledgerLines.push(`<!-- mined-lesson ${c.hash} src=${c.file} row=${id} ${today} -->`);
+    }
+    regLines.splice(lastRow + 1, 0, ...rows);
+    register = regLines.join("\n");
+    const ledgerHeader = "## Mined-lesson ledger (RP-45 sweep state)";
+    if (!register.includes(ledgerHeader)) {
+      register = `${register.replace(/\n+$/, "\n")}\n${ledgerHeader}\n\nDedupe store for the step-9 lesson-mining sweep in \`scripts/session-closeout\`: one entry per lesson line ever mined (or reviewed at seed time). Do not hand-edit; removing an entry re-mines its lesson.\n\n`;
+    }
+    register = `${register.replace(/\n+$/, "\n")}${ledgerLines.join("\n")}\n`;
+    fs.writeFileSync(registerPath, register);
+    console.log(`added=${candidates.length} ids=${ids.join(",")}`);
+  ' "$RISK_REGISTER" "$MEMORY_DIR" "$(date +%Y-%m-%d)" 2>&1)"
+  MINE_RC=$?
+  if [ "$MINE_RC" -ne 0 ]; then
+    fail "step 9: lesson-mining sweep failed: $(printf '%s' "$MINE_OUT" | tail -1)"
+  elif [ "$MINE_OUT" = "added=0" ]; then
+    pass "step 9: lesson-mining sweep: no unmined LESSON/ROOT CAUSE lines (register + ledger current)"
+  else
+    pass "step 9: lesson-mining sweep appended candidate register row(s): $MINE_OUT (review + guard decision pending)"
+  fi
+fi
+
+# --- Step 10: register aging sweep -> foresight-capture payload (RP-45) -------
+# Aged guard=NONE rows become quarantined foresight work via the foresight-
+# capture workflow, never a bare `gh issue create` (GRILL-009). This gate
+# EMITS the routed payload (dry_run:true) + asserts the staging invariants;
+# it never creates issues itself.
+if [ ! -f "$RISK_REGISTER" ]; then
+  note "step 10: risk register missing; aging sweep skipped (step 9 already failed)"
+else
+  CURRENT_SESSION="${SESSION_CLOSEOUT_SESSION:-}"
+  if [ -z "$CURRENT_SESSION" ] && [ -d "$MEMORY_DIR" ]; then
+    CURRENT_SESSION="$(ls "$MEMORY_DIR" 2>/dev/null | sed -nE 's/.*session-([0-9]+).*/\1/p' | sort -n | tail -1)"
+  fi
+  mkdir -p "$FORESIGHT_DIR" 2>/dev/null
+  AGE_OUT="$("$NODE_BIN" -e '
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const [registerPath, payloadDir, currentSessionRaw, ageSessionsRaw, ageDaysRaw, parentRef, targetVersion, today] = process.argv.slice(1);
+    const currentSession = currentSessionRaw ? Number(currentSessionRaw) : null;
+    const ageSessions = Number(ageSessionsRaw);
+    const ageDays = Number(ageDaysRaw);
+    const register = fs.readFileSync(registerPath, "utf8");
+    const lines = register.split("\n");
+    const emitted = [];
+    let sessionSkips = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/^\| (RR-\d+) \| (.*?) \| (.*?) \| (.*?) \| (.*?) \|\s*$/);
+      if (!m) continue;
+      const [, id, pattern, incidents, guard, last] = m;
+      if (!guard.startsWith("NONE")) continue; // documented parsing contract: unguarded iff Guard starts with NONE
+      if (guard.includes("foresight-payload-emitted")) continue; // dedupe: already emitted
+      let aged = false;
+      const sm = last.match(/session-(\d+)/);
+      const dm = last.match(/(\d{4}-\d{2}-\d{2})/);
+      if (sm) {
+        if (currentSession === null || Number.isNaN(currentSession)) { sessionSkips += 1; continue; }
+        aged = currentSession - Number(sm[1]) >= ageSessions;
+      } else if (dm) {
+        aged = (Date.parse(today) - Date.parse(dm[1])) / 86400000 >= ageDays;
+      }
+      if (!aged) continue;
+      const observation = {
+        kind: "risk",
+        milestone: "",
+        scope: "workspace",
+        what: `Recurring failure pattern ${id}: ${pattern}`,
+        why: `RISK-REGISTER row ${id} has Guard=NONE and aged past the threshold (last recurrence: ${last}; incidents: ${incidents}). Auto-converted to quarantined foresight per [[curaos-foresight-rule]] + the register aging protocol (RP-45).`,
+      };
+      if (parentRef) observation.parent_ref = parentRef;
+      if (targetVersion) observation.target_version = targetVersion;
+      const payload = {
+        generated_at: new Date().toISOString(),
+        register_row: id,
+        workflow: "foresight-capture",
+        args: { observations: JSON.stringify([observation]), dry_run: true },
+        invocation: `agent-workflow-kit workflow-run foresight-capture --args-json ${JSON.stringify(JSON.stringify({ observations: JSON.stringify([observation]), dry_run: true }))} --json`,
+        staging_invariants: {
+          labels: ["needs-triage", "foresight"],
+          ready_for_agent: false,
+          project_status: "Backlog",
+          target_version: targetVersion || null,
+          parent_ref: parentRef || null,
+          dry_run: true,
+        },
+      };
+      const file = path.join(payloadDir, `${id}-foresight-payload.json`);
+      fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
+      // Re-read and ASSERT the staging invariants on the artifact itself: this
+      // is the dry-run evidence the acceptance demands, checked, not narrated.
+      const back = JSON.parse(fs.readFileSync(file, "utf8"));
+      const inv = back.staging_invariants;
+      const obsBack = JSON.parse(back.args.observations)[0];
+      const checks = [
+        ["labels needs-triage+foresight", Array.isArray(inv.labels) && inv.labels.includes("needs-triage") && inv.labels.includes("foresight")],
+        ["NO ready-for-agent promotion", inv.ready_for_agent === false && !inv.labels.includes("ready-for-agent") && !back.args.observations.includes("ready-for-agent")],
+        ["Project status Backlog", inv.project_status === "Backlog"],
+        ["target version set only when known", targetVersion ? inv.target_version === targetVersion && obsBack.target_version === targetVersion : inv.target_version === null && !("target_version" in obsBack)],
+        ["parent linkage only when a parent exists", parentRef ? inv.parent_ref === parentRef && obsBack.parent_ref === parentRef && /^[^#\s]+#\d+$/.test(parentRef) : inv.parent_ref === null && !("parent_ref" in obsBack)],
+        ["dry_run true (no live issue creation)", inv.dry_run === true && back.args.dry_run === true],
+      ];
+      const bad = checks.filter(([, ok]) => !ok);
+      if (bad.length) { console.error(`invariant violation on ${id}: ${bad.map(([n]) => n).join("; ")}`); process.exit(3); }
+      for (const [name] of checks) console.log(`evidence ${id}: invariant ok: ${name}`);
+      console.log(`evidence ${id}: payload=${file}`);
+      console.log(`evidence ${id}: route via: ${back.invocation}`);
+      // Stamp the row so a second run files nothing (durable dedupe). The cell
+      // still STARTS with NONE, so the unguarded-parse contract holds.
+      lines[i] = lines[i].replace(`| ${guard} |`, `| ${guard} [foresight-payload-emitted ${today}] |`);
+      emitted.push(id);
+    }
+    if (emitted.length) fs.writeFileSync(registerPath, lines.join("\n"));
+    if (sessionSkips) console.log(`note current session underivable: ${sessionSkips} session-form row(s) skipped`);
+    console.log(`emitted=${emitted.length}${emitted.length ? ` rows=${emitted.join(",")}` : ""}`);
+  ' "$RISK_REGISTER" "$FORESIGHT_DIR" "$CURRENT_SESSION" "$RISK_AGE_SESSIONS" "$RISK_AGE_DAYS" "$FORESIGHT_PARENT" "$FORESIGHT_TARGET_VERSION" "$(date +%Y-%m-%d)" 2>&1)"
+  AGE_RC=$?
+  if [ "$AGE_RC" -ne 0 ]; then
+    fail "step 10: register aging sweep failed: $(printf '%s' "$AGE_OUT" | tail -1)"
+  else
+    printf '%s\n' "$AGE_OUT" | sed -n 's/^evidence /note  step 10 /p'
+    if printf '%s' "$AGE_OUT" | grep -q 'current session underivable'; then
+      note "step 10: $(printf '%s' "$AGE_OUT" | grep 'current session underivable' | head -1 | sed 's/^note //')"
+    fi
+    SUMMARY="$(printf '%s' "$AGE_OUT" | grep '^emitted=' | tail -1)"
+    case "$SUMMARY" in
+      emitted=0) pass "step 10: aging sweep: no aged guard=NONE register rows pending foresight conversion" ;;
+      emitted=*) pass "step 10: aging sweep emitted foresight-capture payload(s): $SUMMARY (dry-run evidence above; ROUTE the payload, do not gh-issue-create)" ;;
+      *) fail "step 10: aging sweep produced no summary line: $(printf '%s' "$AGE_OUT" | tail -1)" ;;
+    esac
+  fi
+fi
+
+# --- Step 11: knowledge drift gate (RP-61) ------------------------------------
+DRIFT_SCRIPT="${SESSION_CLOSEOUT_DRIFT_SCRIPT:-$SCRIPTS/check-knowledge-drift.sh}"
+if [ ! -f "$DRIFT_SCRIPT" ]; then
+  fail "step 11: knowledge-drift gate missing ($DRIFT_SCRIPT), failing closed"
+else
+  DRIFT_OUT="$(KNOWLEDGE_DRIFT_WS="$WS" \
+    KNOWLEDGE_DRIFT_MEMORY_INDEX="$MEMORY_DIR/MEMORY.md" \
+    KNOWLEDGE_DRIFT_ORG="$ORG" \
+    bash "$DRIFT_SCRIPT" 2>&1)"
+  DRIFT_RC=$?
+  if [ "$DRIFT_RC" -eq 0 ]; then
+    pass "step 11: knowledge stores reconcile with git/GitHub state (check-knowledge-drift)"
+  else
+    fail "step 11: knowledge drift detected (exit $DRIFT_RC): $(printf '%s' "$DRIFT_OUT" | grep -E '^(DRIFT|FAIL)' | head -3 | tr '\n' ' ')"
+  fi
+fi
+
+# --- Step 12: ISSUE-ROADMAP render from the shared board snapshot (RP-53) -----
+# Deterministic render: tracker state flows board snapshot -> table, with a
+# fresh Generated-at stamp every closeout (the step-6 stamp gate guards the
+# pre-existing file; this step regenerates it and re-asserts the stamp).
+RENDER_SCRIPT="${SESSION_CLOSEOUT_ROADMAP_RENDER:-$SELF_DIR/render-issue-roadmap.js}"
+if [ ! -f "$RENDER_SCRIPT" ]; then
+  fail "step 12: roadmap renderer missing ($RENDER_SCRIPT), failing closed"
+else
+  if [ -n "${SESSION_CLOSEOUT_SNAPSHOT:-}" ]; then
+    RENDER_OUT="$("$NODE_BIN" "$RENDER_SCRIPT" --out "$ROADMAP" --snapshot "$SESSION_CLOSEOUT_SNAPSHOT" --offline 2>&1)"
+  else
+    RENDER_OUT="$("$NODE_BIN" "$RENDER_SCRIPT" --out "$ROADMAP" 2>&1)"
+  fi
+  RENDER_RC=$?
+  if [ "$RENDER_RC" -ne 0 ]; then
+    fail "step 12: ISSUE-ROADMAP render failed (exit $RENDER_RC): $(printf '%s' "$RENDER_OUT" | tail -1)"
+  elif grep -Eq '^Generated at [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$ROADMAP"; then
+    pass "step 12: ISSUE-ROADMAP regenerated from the board snapshot ($(printf '%s' "$RENDER_OUT" | tail -1))"
+  else
+    fail "step 12: render completed but ISSUE-ROADMAP carries no 'Generated at <ISO>' stamp (renderer contract broken)"
+  fi
+fi
+
+# --- Step 13: RESOLUTION-MAP past-due DEFERRED-MILESTONE sweep (RP-53) --------
+# Milestone-trigger sweep: deferrals whose trigger milestone is already in the
+# completed set surface as a checklist artifact. Advisory on the count (each
+# row is resolved by doing the work or re-keying with a resolution-pin), but
+# a missing map/sweep or a parse failure fails closed.
+RES_MAP="${SESSION_CLOSEOUT_RESOLUTION_MAP:-$WS/ai/curaos/docs/adr/RESOLUTION-MAP.md}"
+RES_SWEEP="${SESSION_CLOSEOUT_RESMAP_SWEEP:-$SELF_DIR/sweep-resolution-map.js}"
+RES_CHECKLIST="${SESSION_CLOSEOUT_RESMAP_CHECKLIST:-$WS/.scratch/resolution-map-pastdue.md}"
+RES_COMPLETED="${SESSION_CLOSEOUT_RESMAP_COMPLETED:-15}"
+if [ ! -f "$RES_SWEEP" ]; then
+  fail "step 13: resolution-map sweep missing ($RES_SWEEP), failing closed"
+elif [ ! -f "$RES_MAP" ]; then
+  fail "step 13: RESOLUTION-MAP missing ($RES_MAP), failing closed"
+else
+  RES_OUT="$("$NODE_BIN" "$RES_SWEEP" --map "$RES_MAP" --out "$RES_CHECKLIST" --completed-through "$RES_COMPLETED" 2>&1)"
+  RES_RC=$?
+  if [ "$RES_RC" -ne 0 ]; then
+    fail "step 13: resolution-map sweep failed (exit $RES_RC): $(printf '%s' "$RES_OUT" | tail -1)"
+  else
+    RES_SUMMARY="$(printf '%s\n' "$RES_OUT" | grep '^sweep-resolution-map:' | tail -1)"
+    if [ -z "$RES_SUMMARY" ]; then
+      fail "step 13: resolution-map sweep produced no summary line: $(printf '%s' "$RES_OUT" | tail -1)"
+    else
+      pass "step 13: RESOLUTION-MAP past-due sweep emitted its checklist ($RES_SUMMARY)"
+      case "$RES_SUMMARY" in
+        "sweep-resolution-map: 0 past-due"*) : ;;
+        *) note "step 13: past-due deferrals pending; review $RES_CHECKLIST and resolve or re-key each row (dated resolution-pin, never delete)" ;;
+      esac
+    fi
+  fi
+fi
+
+echo ""
+if [ "$FAILS" -eq 0 ]; then
+  echo "session-closeout: ALL CHECKS GREEN, session may stop"
+  exit 0
+fi
+echo "session-closeout: $FAILS check(s) FAILED, session is NOT closed"
+exit 1

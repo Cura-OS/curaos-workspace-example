@@ -1,0 +1,3752 @@
+{
+  "generated_for": "XSRC-EPIC",
+  "phase": "9",
+  "workflows": [
+    {
+      "id": "hc.registration",
+      "domain": "healthcare",
+      "name": "Patient Registration & Demographics",
+      "category": "clinical",
+      "source_systems": [
+        "bahmni-core (CSV Data Import, OpenELIS Patient Feed Sync)",
+        "vista-fhir-codex (Synthea Patient Intake & Validation)",
+        "openmrs (Initializer Metadata Load)"
+      ],
+      "source_files": [
+        "bahmni-core admin/.../BahmniEncounterTransactionImportService.java",
+        "bahmni-core .../task/OpenElisPatientFeedTask.java",
+        "vista-fhir-codex scripts/vehu10_bootstrap.py, local-vehu-to-fhir-intake.sh"
+      ],
+      "local_equivalent": "patient-core-service (MRN+party FK, no-PHI state machine, outbox) + party-core-service + healthstack-patient-service (PHI overlay DOB/SSN-AES256GCM, cross-schema FK, merged view) + healthstack-consent-service",
+      "local_gaps": [
+        "healthstack-patient FK currently in-memory pending M9 Drizzle (data-truth rule violation)",
+        "no self-serve person-side pre-registration intake form wired (builder-core exists but no registration form template)",
+        "bulk/feed import (CSV, OpenELIS-style atom feed) not exposed as a workflow-core process"
+      ],
+      "suggested_representation": {
+        "trigger": "person self-starts pre-registration (patient-app) OR front-desk creates record OR inbound feed/CSV import event",
+        "states": [
+          "draft-self-entered",
+          "identity-verified",
+          "duplicate-check",
+          "demographics-complete",
+          "consent-captured",
+          "active",
+          "merged/inactive"
+        ],
+        "actors": [
+          "person (subject/owner)",
+          "front-desk registrar",
+          "registration supervisor (merge approval)"
+        ],
+        "permissions": "RBAC registrar role for create; person owns own demographic edits via patient-app; ABAC tenant isolation; ConsentGuard on PHI overlay read/write",
+        "entities": [
+          "patient-core.Patient(MRN)",
+          "party-core.Party",
+          "healthstack-patient PHI overlay",
+          "consent record"
+        ],
+        "apis": [
+          "patient-core REST (FHIR Patient contract)",
+          "party-core CRUD",
+          "healthstack-patient merged-view read",
+          "terminology-service for coded demographics"
+        ],
+        "ui": [
+          "patient-app self-registration journey",
+          "admin-app/front-office registrar desk",
+          "clinician-app patient banner"
+        ],
+        "jobs": [
+          "dedup/match background job",
+          "feed/CSV importer (integrations-core connector)"
+        ],
+        "integrations": [
+          "OpenELIS/FHIR feed via integrations-core",
+          "terminology-service ValueSet"
+        ],
+        "notifications": [
+          "welcome + portal-invite to person (notify-service multi-channel)",
+          "duplicate-found alert to registrar"
+        ],
+        "audit": "audit-core SHA-256 hash-chain on every demographic write + GDPR Art.15 disclosure",
+        "failure_modes": [
+          "duplicate MRN",
+          "identity proofing failure",
+          "PHI overlay FK orphan",
+          "feed conflict (needs human conflict resolution per OpenELIS sync)"
+        ],
+        "tests": [
+          "contract: FHIR Patient",
+          "integration: real Postgres dedup",
+          "e2e: self-register -> verified -> active",
+          "consent-gate denial test"
+        ]
+      },
+      "person_centric_reshape": "Source flow is registrar-form-first (Bahmni/VistA admin entry). Re-center so the person starts their own profile from the patient-app (pre-fill demographics, upload ID, consent choices) before ever reaching a desk; the registrar role becomes verify+merge, not data-entry. The org's MPI/dedup requirement is satisfied as a consequence of giving the person one durable owned identity.",
+      "implementation_mode": "local native workflow-core (BPMN registration process) + patient-core/party-core/healthstack-patient services; feed/CSV import as integrations-core connector + source background service pattern"
+    },
+    {
+      "id": "hc.appointment",
+      "domain": "healthcare",
+      "name": "Appointment Booking & Check-in",
+      "category": "clinical",
+      "source_systems": [
+        "odoo (CRM activity scheduling analog)",
+        "openmrs reference app scheduling",
+        "RAPTOR (scheduling step)",
+        "daily-plan (facility/clinic context)"
+      ],
+      "source_files": [
+        "scheduling FHIR Appointment/Slot patterns from source corpus",
+        "RAPTOR raptor_workflow/core/Transitions.php (schedule transition)"
+      ],
+      "local_equivalent": "scheduling-service (FHIR Appointment/Slot, desk metrics/alerts, double-booking prevention) + calendar-core-service (RRULE) + business-scheduling-service (scaffold) + notify-service",
+      "local_gaps": [
+        "business-scheduling-service is scaffold-only",
+        "no person-facing self-book + check-in journey wired (patient-app)",
+        "queue/waiting-room state not modeled",
+        "reminder/recall automation not configured on automation-core"
+      ],
+      "suggested_representation": {
+        "trigger": "person requests slot (self-book) OR provider/desk books OR recall-due automation fires",
+        "states": [
+          "requested",
+          "slot-held",
+          "confirmed",
+          "reminded",
+          "checked-in",
+          "in-queue",
+          "roomed",
+          "completed",
+          "no-show/cancelled"
+        ],
+        "actors": [
+          "person",
+          "scheduler/front-desk",
+          "provider",
+          "care coordinator (recall)"
+        ],
+        "permissions": "person books own appointments within open slots; desk role overrides; ABAC by site/department; ConsentGuard on any PHI shown",
+        "entities": [
+          "scheduling.Appointment",
+          "scheduling.Slot",
+          "calendar-core occurrence",
+          "encounter (created on check-in)"
+        ],
+        "apis": [
+          "scheduling-service REST",
+          "calendar-core occurrence expand",
+          "notify-service send"
+        ],
+        "ui": [
+          "patient-app self-book + check-in (QR/geofence arrival via personal-tracking)",
+          "clinician-app day list",
+          "front-office queue board"
+        ],
+        "jobs": [
+          "reminder cron (automation-core)",
+          "recall/overdue-appointment scan",
+          "no-show reaper"
+        ],
+        "integrations": [
+          "calendar-core RRULE",
+          "personal-tracking geofence arrival auto-check-in",
+          "terminology for visit types"
+        ],
+        "notifications": [
+          "multi-channel reminders + waitlist-open offers + check-in confirmation (notify-service SSE)"
+        ],
+        "audit": "audit-core on book/cancel/check-in",
+        "failure_modes": [
+          "double-booking (prevented by service)",
+          "slot race",
+          "no-show",
+          "reminder delivery failure",
+          "overbooking on recall surge"
+        ],
+        "tests": [
+          "double-book prevention integration",
+          "e2e self-book->reminder->check-in",
+          "recall automation job test"
+        ]
+      },
+      "person_centric_reshape": "Replace the desk-driven schedule grid as primary with a person-first journey: the person sees real open slots, self-books, gets reminders, and checks in from their phone (geofence arrival auto-check-in via personal-tracking). The desk's capacity/double-booking/queue-management requirements ride on top of the same Appointment/Slot data. Recall becomes a kindness ('you're due') not an org backlog.",
+      "implementation_mode": "local native workflow-core (check-in/queue process) + scheduling-core/calendar-core services + automation-core (reminders/recall cron); finish business-scheduling-service overlay"
+    },
+    {
+      "id": "hc.triage",
+      "domain": "healthcare",
+      "name": "Triage / Risk-flag Evaluation",
+      "category": "clinical",
+      "source_systems": [
+        "vista-m (Clinical Reminder Evaluation)",
+        "vista-dashboard-rules (rule evaluation, forecast notes due)",
+        "aware (critical alert)",
+        "asrcm (Surgical Risk Calculation)",
+        "maternity-tracker (Patient Tracking Flag Evaluation)"
+      ],
+      "source_files": [
+        "vista-dashboard-rules C9CORIDE.m, C9CMODNT.m, C9CFCAST.m",
+        "asrcm CalculationController.java + RiskModel",
+        "maternity-tracker Routines/DSIO5.m"
+      ],
+      "local_equivalent": "workflow-core-service (rules/incidents) + automation-core-service (conditional branching) + terminology-service + clinical-decision-support is NOT yet a service (gap) + tasks-core for resulting actions",
+      "local_gaps": [
+        "no dedicated rules/CDS engine service (asrcm-style risk-model admin + evaluation)",
+        "reminder-due rule evaluation (vista-dashboard-rules forecast) not modeled",
+        "triage scoring (queue acuity) absent in scheduling/encounter"
+      ],
+      "suggested_representation": {
+        "trigger": "encounter created / vitals captured / scheduled rule-evaluation cron / inbound result event",
+        "states": [
+          "data-collected",
+          "rules-evaluated",
+          "risk-scored",
+          "flagged",
+          "acknowledged",
+          "action-taken",
+          "cleared"
+        ],
+        "actors": [
+          "nurse/triage clinician",
+          "provider (reviews flags)",
+          "CDS admin (authors rules/risk models)"
+        ],
+        "permissions": "clinical roles evaluate; CDS-admin authors rules; ConsentGuard on PHI inputs; break-glass logged",
+        "entities": [
+          "encounter",
+          "observation/vitals",
+          "rule/formula definition",
+          "risk-model (coefficients)",
+          "flag/alert",
+          "task"
+        ],
+        "apis": [
+          "workflow-core rule eval",
+          "terminology coded inputs",
+          "tasks-core create follow-up",
+          "orders-service (suggested orders)"
+        ],
+        "ui": [
+          "clinician-app triage board with acuity color-coding (vista-dashboard pattern)",
+          "CDS-admin rule/risk-model editor (builder-studio)",
+          "patient-app person-friendly 'what this means'"
+        ],
+        "jobs": [
+          "scheduled rule re-evaluation (forecast notes-due/reminders)",
+          "risk recalculation on new data"
+        ],
+        "integrations": [
+          "terminology ValueSets",
+          "orders-service for protocol-driven orders"
+        ],
+        "notifications": [
+          "flag-to-clinician (notify)",
+          "escalation if unacknowledged (links to critical-alert workflow)"
+        ],
+        "audit": "audit-core on flag raise/ack/clear; rule version recorded with each evaluation",
+        "failure_modes": [
+          "stale rule version",
+          "false positive flag fatigue",
+          "unacknowledged flag (escalates)",
+          "missing input data"
+        ],
+        "tests": [
+          "rule-eval determinism test",
+          "risk-model coefficient calc test (asrcm pattern)",
+          "escalation-on-no-ack test"
+        ]
+      },
+      "person_centric_reshape": "Source dashboards are org/team-centric ('notes due by team', provider worklists). Re-center: each person carries their own risk/care-gap timeline; the clinician's team-worklist is a roll-up view of person timelines. Person sees plain-language 'you're due for X' and 'your result needs follow-up', turning org compliance reminders into the person's own health agenda.",
+      "implementation_mode": "custom state machine for risk scoring (asrcm-style) wrapped as a CDS rules service + local native workflow-core for evaluation orchestration + automation-core scheduled re-evaluation"
+    },
+    {
+      "id": "hc.encounter",
+      "domain": "healthcare",
+      "name": "Encounter Documentation",
+      "category": "clinical",
+      "source_systems": [
+        "bahmni-core (Encounter Transaction Workflow)",
+        "vista-m",
+        "coms (Treatment Plan Creation)"
+      ],
+      "source_files": [
+        "bahmni-emr-api .../BahmniEncounterTransactionServiceImpl.java",
+        "coms framework/application/models/Orders.php, app/js/app/view/NewPlan/"
+      ],
+      "local_equivalent": "encounter-service (FHIR Encounter contract + auth probes, clinical models NOT built - partial) + clinical-doc-service (FHIR Composition/DocumentReference, signatures) + healthstack-notes-service (scaffold) + orders-service",
+      "local_gaps": [
+        "encounter-service clinical models not yet built (partial)",
+        "healthstack-notes-service scaffold-only",
+        "healthstack-problems-service scaffold-only",
+        "no encounter-transaction atomic save (observations+orders+notes) orchestration"
+      ],
+      "suggested_representation": {
+        "trigger": "check-in completes -> encounter opened; provider opens chart",
+        "states": [
+          "open",
+          "documenting",
+          "orders-placed",
+          "note-drafted",
+          "signed/attested",
+          "amended",
+          "closed/billed"
+        ],
+        "actors": [
+          "provider (author)",
+          "resident/scribe",
+          "attending (co-sign)",
+          "person (reads after-visit)"
+        ],
+        "permissions": "author write; co-sign role; ConsentGuard on every clinical read/write; amendment requires reason",
+        "entities": [
+          "encounter",
+          "clinical-doc Composition",
+          "problems (Condition)",
+          "orders (ServiceRequest)",
+          "observations"
+        ],
+        "apis": [
+          "encounter-service REST",
+          "clinical-doc compose/sign",
+          "orders CPOE",
+          "terminology codes"
+        ],
+        "ui": [
+          "clinician-app encounter workspace",
+          "patient-app after-visit summary (links AVS workflow)"
+        ],
+        "jobs": [
+          "unsigned-note nag (automation-core)",
+          "outbox publish encounter.completed event"
+        ],
+        "integrations": [
+          "terminology SNOMED/LOINC/ICD",
+          "orders + lab/rad downstream"
+        ],
+        "notifications": [
+          "co-sign request",
+          "AVS ready to person"
+        ],
+        "audit": "audit-core + clinical-doc signature chain; amendments tamper-evident",
+        "failure_modes": [
+          "partial save (encounter transaction must be atomic)",
+          "unsigned note",
+          "co-sign timeout",
+          "consent revoked mid-encounter"
+        ],
+        "tests": [
+          "atomic encounter-transaction integration",
+          "sign+amend audit test",
+          "consent-gate test"
+        ]
+      },
+      "person_centric_reshape": "Bahmni's encounter-transaction is a clinician save bundle. Re-center the output toward the person: every signed encounter immediately yields a plain-language after-visit summary the person owns, and the person can read (not edit) their problems/orders/notes in patient-app. Clinician documentation completeness/billing-capture requirements are satisfied as the byproduct of producing that person-readable record.",
+      "implementation_mode": "local native workflow-core (encounter lifecycle) + build out encounter-service clinical models + clinical-doc-service; finish healthstack-notes/problems services"
+    },
+    {
+      "id": "hc.lab",
+      "domain": "healthcare",
+      "name": "Lab Order + Result Review",
+      "category": "clinical",
+      "source_systems": [
+        "vista-m (Lab Order to Results Workflow)",
+        "bahmni-core (OpenELIS Atom Feed Integration)",
+        "vista-fhir-codex (Lab Result Extraction with Panel Grouping)"
+      ],
+      "source_files": [
+        "vista-m Packages/Lab Service/Routines",
+        "bahmni .../OpenElisAccessionEventWorker.java",
+        "vista-fhir-codex src/C0FHIRL.m::GETLAB (panel grouping -> DiagnosticReport)"
+      ],
+      "local_equivalent": "orders-service (FHIR ServiceRequest CPOE, Observation/DiagnosticReport results, attestation) + healthstack-lab-service (scaffold-only) + terminology-service (LOINC)",
+      "local_gaps": [
+        "healthstack-lab-service scaffold-only (FHIR Observation/DiagnosticReport TBD)",
+        "no LIS/OpenELIS atom-feed inbound result connector",
+        "panel grouping (accession -> DiagnosticReport) not implemented",
+        "critical-value detection not wired to alert workflow"
+      ],
+      "suggested_representation": {
+        "trigger": "provider places lab order (CPOE) -> specimen collected -> instrument/LIS result inbound",
+        "states": [
+          "ordered",
+          "specimen-collected",
+          "in-lab",
+          "resulted-preliminary",
+          "resulted-final",
+          "reviewed",
+          "critical-flagged",
+          "communicated-to-person"
+        ],
+        "actors": [
+          "ordering provider",
+          "lab tech (collection)",
+          "lab (result post)",
+          "reviewing provider",
+          "person"
+        ],
+        "permissions": "order role; result-review attestation; ConsentGuard; critical results escalate regardless",
+        "entities": [
+          "orders.ServiceRequest",
+          "Observation",
+          "DiagnosticReport (panel-grouped)",
+          "specimen"
+        ],
+        "apis": [
+          "orders-service REST",
+          "terminology LOINC",
+          "healthstack-lab result ingest"
+        ],
+        "ui": [
+          "clinician-app result inbox with panel grouping + trend",
+          "patient-app results with plain-language interpretation + 'what to do'"
+        ],
+        "jobs": [
+          "LIS atom-feed poller (integrations-core)",
+          "critical-value scanner -> critical-alert workflow",
+          "unreviewed-result nag"
+        ],
+        "integrations": [
+          "OpenELIS/LIS via integrations-core connector",
+          "terminology"
+        ],
+        "notifications": [
+          "result-ready to provider + person",
+          "critical -> escalation path (hc.critical_alert)"
+        ],
+        "audit": "audit-core on order/result/review; review attestation",
+        "failure_modes": [
+          "lost specimen",
+          "result-provider mismatch",
+          "unreviewed critical result (must escalate)",
+          "feed parse failure"
+        ],
+        "tests": [
+          "panel-grouping->DiagnosticReport test",
+          "critical-value->escalation test",
+          "feed-ingest integration"
+        ]
+      },
+      "person_centric_reshape": "VistA routes results to a provider inbox; the person waits. Re-center so the person sees their result the moment it is reviewed-safe, with a plain-language interpretation, reference ranges, and trend, plus a clear next-step. The provider's review/attestation requirement and the lab's accession/panel rigor are preserved but become the gate that makes the person-facing result trustworthy, not a wall the person sits behind.",
+      "implementation_mode": "local native workflow-core (order->result->review) + orders-service + build healthstack-lab-service; LIS inbound as integrations-core connector + source background service (atom-feed) pattern; critical-value scanner feeds hc.critical_alert"
+    },
+    {
+      "id": "hc.radiology",
+      "domain": "healthcare",
+      "name": "Radiology Order + Result Review (Protocol/Contraindication)",
+      "category": "clinical",
+      "source_systems": [
+        "RAPTOR (Order Intake -> Protocol Selection -> Scheduling; Contraindication Evaluation)",
+        "aware (Abnormal imaging alert)",
+        "vista-m"
+      ],
+      "source_files": [
+        "RAPTOR raptor_workflow/core/Transitions.php",
+        "RAPTOR raptor_contraindications/core/ContraIndEngine.inc",
+        "aware AlertIntercept.pas"
+      ],
+      "local_equivalent": "orders-service (ServiceRequest) + healthstack-imaging-service (scaffold-only, FHIR ImagingStudy/DICOM/PACS TBD) + workflow-core (protocol selection states) + terminology",
+      "local_gaps": [
+        "healthstack-imaging-service scaffold-only",
+        "no protocol library / contraindication rules engine (RAPTOR ContraIndEngine analog)",
+        "no DICOM/PACS integration",
+        "abnormal-imaging alert not wired to critical-alert workflow"
+      ],
+      "suggested_representation": {
+        "trigger": "provider orders imaging study",
+        "states": [
+          "ordered",
+          "protocol-pending",
+          "protocol-assigned",
+          "contraindication-checked",
+          "scheduled",
+          "exam-performed",
+          "read-pending",
+          "reported",
+          "abnormal-flagged",
+          "communicated"
+        ],
+        "actors": [
+          "ordering provider",
+          "radiologist (protocol+read)",
+          "technician (exam)",
+          "person"
+        ],
+        "permissions": "order role; radiologist protocol/read; ConsentGuard; contraindication override requires reason",
+        "entities": [
+          "orders.ServiceRequest",
+          "protocol definition",
+          "contraindication rule set",
+          "ImagingStudy",
+          "DiagnosticReport (read)"
+        ],
+        "apis": [
+          "orders-service",
+          "healthstack-imaging ingest",
+          "terminology",
+          "contraindication rules eval"
+        ],
+        "ui": [
+          "radiologist worklist (protocol + contraindication flags)",
+          "tech exam checklist",
+          "patient-app result + prep instructions"
+        ],
+        "jobs": [
+          "contraindication evaluation on protocol assign",
+          "abnormal-read scanner -> critical-alert",
+          "DICOM/PACS sync"
+        ],
+        "integrations": [
+          "PACS/DICOM via integrations-core",
+          "allergy/med/blood-type for contraindications (orders/healthstack)",
+          "terminology"
+        ],
+        "notifications": [
+          "protocol prep instructions to person",
+          "abnormal -> escalation"
+        ],
+        "audit": "audit-core on protocol/override/read; contraindication decision logged",
+        "failure_modes": [
+          "missed contraindication",
+          "protocol mismatch",
+          "unread abnormal study (escalates)",
+          "PACS sync failure"
+        ],
+        "tests": [
+          "contraindication-engine rule test",
+          "abnormal->escalation test",
+          "protocol state-transition test"
+        ]
+      },
+      "person_centric_reshape": "RAPTOR is radiologist-workflow-centric (worklist, protocol, schedule). Re-center: the person gets prep instructions, contraindication safety checks done before they arrive (allergies/meds pulled automatically), and a plain-language result with next steps. Radiologist protocol/contraindication rigor becomes the safety wrapper around the person's study, not an internal-only worklist.",
+      "implementation_mode": "custom state machine for protocol/contraindication (RAPTOR ContraIndEngine analog) as a rules module + local native workflow-core orchestration + build healthstack-imaging-service; PACS via integrations-core; abnormal feeds hc.critical_alert"
+    },
+    {
+      "id": "hc.prescription",
+      "domain": "healthcare",
+      "name": "Prescription / Medication Order",
+      "category": "clinical",
+      "source_systems": [
+        "vista-m (Medication Administration Workflow)",
+        "bahmni-core (Drug Order Processing)",
+        "coms (Chemotherapy Order Notification)"
+      ],
+      "source_files": [
+        "vista-m Packages/Inpatient Medications/Routines",
+        "bahmni .../BahmniDrugOrderServiceImpl.java",
+        "coms framework/application/models/Workflow.php"
+      ],
+      "local_equivalent": "orders-service (CPOE) + healthstack-meds-service (scaffold-only, FHIR Medication TBD) + terminology (RxNorm) + healthstack-consent",
+      "local_gaps": [
+        "healthstack-meds-service scaffold-only",
+        "no drug-drug/drug-allergy interaction engine (GMRA analog)",
+        "no pharmacy review queue / MAR (administration record)",
+        "no e-prescribing transmission"
+      ],
+      "suggested_representation": {
+        "trigger": "provider prescribes medication",
+        "states": [
+          "prescribed",
+          "interaction-checked",
+          "pharmacist-review",
+          "verified",
+          "dispensed",
+          "administered/MAR",
+          "refill-due",
+          "discontinued"
+        ],
+        "actors": [
+          "prescriber",
+          "pharmacist (review/verify)",
+          "nurse (administration)",
+          "person"
+        ],
+        "permissions": "prescriber role; pharmacist verify; nurse MAR at bedside; ConsentGuard; controlled-substance extra auth",
+        "entities": [
+          "orders.MedicationRequest",
+          "Medication",
+          "interaction/allergy data",
+          "MAR (MedicationAdministration)"
+        ],
+        "apis": [
+          "orders-service",
+          "terminology RxNorm",
+          "interaction-check",
+          "healthstack-meds"
+        ],
+        "ui": [
+          "prescriber order entry w/ interaction alerts",
+          "pharmacist verify queue",
+          "nurse bedside MAR",
+          "patient-app med list + refill request + instructions"
+        ],
+        "jobs": [
+          "interaction/allergy check on order",
+          "refill-due scan (automation-core)",
+          "controlled-substance reporting"
+        ],
+        "integrations": [
+          "RxNorm terminology",
+          "e-prescribe network via integrations-core",
+          "allergy data (GMRA analog)"
+        ],
+        "notifications": [
+          "interaction alert to prescriber",
+          "refill-ready to person",
+          "verify request to pharmacist"
+        ],
+        "audit": "audit-core full med chain; controlled-substance tamper-evident",
+        "failure_modes": [
+          "drug-allergy interaction missed",
+          "verify timeout",
+          "wrong-patient med (5-rights)",
+          "refill gap"
+        ],
+        "tests": [
+          "interaction-engine test",
+          "5-rights/MAR test",
+          "controlled-substance audit test"
+        ]
+      },
+      "person_centric_reshape": "VistA medication admin is inpatient-pharmacy-process-centric. Re-center on the person's medication life: one current med list they own, plain-language instructions, self-serve refill requests, adherence reminders, and 'why am I on this'. Pharmacist verification and drug-interaction safety (GMRA-style) are preserved as the safety layer that protects the person, and the inpatient MAR rigor still satisfies administration compliance.",
+      "implementation_mode": "local native workflow-core (prescribe->verify->administer) + orders-service + build healthstack-meds-service + interaction rules module; e-prescribe + refill via integrations-core/automation-core"
+    },
+    {
+      "id": "hc.referral",
+      "domain": "healthcare",
+      "name": "Referral Management",
+      "category": "clinical",
+      "source_systems": [
+        "aware (Urology Consult order dialog on alert ack)",
+        "coms (treatment plan -> downstream)",
+        "odoo CRM pipeline (analog for routing)"
+      ],
+      "source_files": [
+        "aware AlertType order-dialog definitions (KBEditor)",
+        "orders ServiceRequest referral patterns from corpus"
+      ],
+      "local_equivalent": "orders-service (ServiceRequest referral) + tasks-core (assignment/dependencies) + workflow-core (referral lifecycle) + site-core (provider roster) + notify-service",
+      "local_gaps": [
+        "no dedicated referral lifecycle (request->accept->scheduled->completed->report-back loop)",
+        "no provider-directory match for referral target",
+        "closed-loop referral (report back to referrer) not modeled"
+      ],
+      "suggested_representation": {
+        "trigger": "provider creates referral (ServiceRequest) or alert-ack triggers consult order",
+        "states": [
+          "requested",
+          "triaged",
+          "accepted/declined",
+          "scheduled",
+          "seen",
+          "report-back",
+          "closed"
+        ],
+        "actors": [
+          "referring provider",
+          "receiving provider/department",
+          "referral coordinator",
+          "person"
+        ],
+        "permissions": "provider create; receiving accept; coordinator route; ConsentGuard on shared clinical data",
+        "entities": [
+          "orders.ServiceRequest(referral)",
+          "task",
+          "encounter (at receiver)",
+          "report-back document"
+        ],
+        "apis": [
+          "orders-service",
+          "tasks-core",
+          "site-core provider roster",
+          "clinical-doc report-back"
+        ],
+        "ui": [
+          "referring provider track-status",
+          "receiver inbox accept/schedule",
+          "patient-app referral status + appointment + instructions"
+        ],
+        "jobs": [
+          "unaccepted-referral escalation",
+          "report-back-overdue nag",
+          "closed-loop completion check"
+        ],
+        "integrations": [
+          "site-core provider directory",
+          "scheduling-service",
+          "external referral network via integrations-core"
+        ],
+        "notifications": [
+          "referral received/accepted/scheduled to person + referrer",
+          "report-back ready"
+        ],
+        "audit": "audit-core on every state; consent for cross-org share",
+        "failure_modes": [
+          "referral leakage (never accepted)",
+          "no report-back (open loop)",
+          "wrong specialty",
+          "consent missing for external share"
+        ],
+        "tests": [
+          "closed-loop referral e2e",
+          "escalation on no-accept",
+          "report-back audit test"
+        ]
+      },
+      "person_centric_reshape": "Referrals in source systems are provider-to-provider order objects; the person often falls through the gap. Re-center on a person-owned referral journey: the person sees the referral, the chosen specialist, the appointment, and gets nudged through each step, with the loop only 'closed' when the report comes back to their record. The org's leakage/closed-loop-compliance metric is satisfied because the person was carried all the way through.",
+      "implementation_mode": "local native workflow-core (closed-loop referral process) + orders-service + tasks-core + site-core provider directory; external referral exchange via integrations-core"
+    },
+    {
+      "id": "hc.claim_billing",
+      "domain": "healthcare",
+      "name": "Claim / Healthcare Billing & Revenue Cycle",
+      "category": "clinical",
+      "source_systems": [
+        "vista-m (Billing & Revenue Cycle, File 43/433)",
+        "aware (none)",
+        "erpnext invoice patterns (analog)"
+      ],
+      "source_files": [
+        "vista-m Packages/Integrated Billing/Routines",
+        "erpnext sales_invoice.py (GL posting analog)"
+      ],
+      "local_equivalent": "healthstack-billing-service (claims worklist, eligibility/submit, copay/payment, IN-MEMORY store #737) + healthstack-claims-service (scaffold, overlaps billing) + accounting-core-service (double-entry ledger, partial)",
+      "local_gaps": [
+        "healthstack-billing in-memory store (data-truth violation #737)",
+        "healthstack-claims-service scaffold-only and overlaps billing (boundary unclear)",
+        "no charge-capture from encounter",
+        "no denial-management workflow",
+        "no clearinghouse/payer integration",
+        "accounting-core partial"
+      ],
+      "suggested_representation": {
+        "trigger": "encounter/service completes -> charge capture; periodic claim batch",
+        "states": [
+          "charges-captured",
+          "coded",
+          "eligibility-checked",
+          "claim-built",
+          "submitted",
+          "accepted/rejected",
+          "paid/partial",
+          "denied",
+          "appealed",
+          "patient-balance"
+        ],
+        "actors": [
+          "coder/biller",
+          "revenue-cycle manager (denials)",
+          "person (statement/pay)"
+        ],
+        "permissions": "biller role; manager for adjustments/write-offs; person pays own balance; ABAC tenant",
+        "entities": [
+          "charge (from encounter)",
+          "claim",
+          "eligibility response",
+          "payment/ERA",
+          "accounting journal entry"
+        ],
+        "apis": [
+          "healthstack-billing REST",
+          "accounting-core ledger post",
+          "eligibility/clearinghouse connector"
+        ],
+        "ui": [
+          "biller claims worklist + denial queue",
+          "patient-app transparent statement + estimate + self-pay"
+        ],
+        "jobs": [
+          "claim batch submit",
+          "ERA/remittance posting",
+          "denial-followup scan",
+          "statement generation"
+        ],
+        "integrations": [
+          "payer eligibility/clearinghouse via integrations-core",
+          "accounting-core GL"
+        ],
+        "notifications": [
+          "claim status + balance to person",
+          "denial to biller"
+        ],
+        "audit": "audit-core on charges/adjustments/payments; tamper-evident",
+        "failure_modes": [
+          "claim rejection",
+          "denial without followup",
+          "eligibility stale",
+          "in-memory data loss (#737)",
+          "double-charge"
+        ],
+        "tests": [
+          "charge-capture->claim integration",
+          "denial-followup test",
+          "ERA posting -> ledger reconciliation",
+          "real-Postgres persistence (fix #737)"
+        ]
+      },
+      "person_centric_reshape": "VistA/ERP billing is back-office revenue-cycle-centric. Re-center on financial clarity for the person: up-front cost estimates, a single transparent statement in plain language, and easy self-pay/plans. The org's full claim/coding/denial/AR machinery is preserved (no feature loss) but runs behind a person-facing surface that removes billing surprise, which simplifies collections too.",
+      "implementation_mode": "local native workflow-core (revenue-cycle process) + healthstack-billing-service (must move off in-memory to Postgres) + accounting-core ledger; resolve billing/claims service boundary; payer integration via integrations-core"
+    },
+    {
+      "id": "hc.critical_alert",
+      "domain": "healthcare",
+      "name": "Critical Result Alert & Follow-up Escalation",
+      "category": "clinical",
+      "source_systems": [
+        "aware (Critical Alert Escalation Workflow - flagship)",
+        "vista-m (Clinical Reminder)",
+        "vista-dashboard-rules (overdue evaluation)"
+      ],
+      "source_files": [
+        "aware AlertCache.xml, AlertIntercept.pas, SQLTransporter.cs, AwareQIManager Default.aspx.cs"
+      ],
+      "local_equivalent": "notify-service (multi-channel, SSE, delivery tracking) + tasks-core (follow-up tasks) + workflow-core (escalation states) + audit-core",
+      "local_gaps": [
+        "no alert-cache / unacknowledged-alert intercept on chart open (AWARE DLL analog)",
+        "no time-based escalation ladder (>7 days no action -> supervisor)",
+        "no QI compliance reporting on alert follow-up",
+        "no alert-type knowledge-base editor"
+      ],
+      "suggested_representation": {
+        "trigger": "critical lab/imaging result detected (abnormal CXR/mammogram/PSA/FOBT-FIT etc.)",
+        "states": [
+          "alert-raised",
+          "delivered",
+          "acknowledged",
+          "follow-up-ordered",
+          "follow-up-complete",
+          "escalated-L1",
+          "escalated-L2-supervisor",
+          "QI-reviewed",
+          "closed"
+        ],
+        "actors": [
+          "responsible provider",
+          "covering provider",
+          "supervisor/service chief",
+          "QI analyst",
+          "person"
+        ],
+        "permissions": "provider ack/act; supervisor on escalation; QI read compliance; ConsentGuard; alert never suppressed",
+        "entities": [
+          "alert (type-defined)",
+          "acknowledgement",
+          "follow-up task/order",
+          "escalation record",
+          "QI metric"
+        ],
+        "apis": [
+          "notify-service",
+          "tasks-core",
+          "orders-service (follow-up order dialog)",
+          "workflow-core escalation"
+        ],
+        "ui": [
+          "chart-open unacknowledged-alert banner (AWARE intercept analog)",
+          "provider alert inbox",
+          "supervisor escalation dashboard",
+          "QI compliance report",
+          "patient-app 'your result needs follow-up'"
+        ],
+        "jobs": [
+          "unacknowledged-alert escalation timer ladder",
+          "daily QI ETL/compliance calc (AWARE SQL Transporter analog)",
+          "no-action>N-days scanner"
+        ],
+        "integrations": [
+          "lab/rad result events (hc.lab/hc.radiology)",
+          "terminology"
+        ],
+        "notifications": [
+          "multi-channel to provider; person notified result needs attention; supervisor on escalation"
+        ],
+        "audit": "audit-core full ack/escalation chain; tamper-evident; QI metrics derived from audit",
+        "failure_modes": [
+          "alert never acknowledged (must escalate)",
+          "provider out / no coverage",
+          "alert fatigue",
+          "person not informed of own critical result"
+        ],
+        "tests": [
+          "escalation-ladder timer test",
+          "unacked->supervisor test",
+          "QI compliance metric calc test",
+          "person-notification test"
+        ]
+      },
+      "person_centric_reshape": "AWARE is a provider-acknowledgement + QI-supervisor system; the person is invisible. Re-center to guarantee the person is never the last to know: the person is informed their result needs follow-up and can see the action plan, while the provider-ack + time-based escalation + supervisor + QI-compliance machinery (the whole AWARE value) is preserved as the safety net that ensures someone always acts. No feature lost; a person-protection layer added.",
+      "implementation_mode": "local native workflow-core (escalation ladder state machine) + notify-service + tasks-core + audit-core-derived QI; chart-open intercept as a UI guard; result events from hc.lab/hc.radiology"
+    },
+    {
+      "id": "hc.avs",
+      "domain": "healthcare",
+      "name": "After-Visit Summary (AVS) Generation",
+      "category": "clinical",
+      "source_systems": [
+        "avs (AVS Generation, Print/Export, Content Customization, Admin Config, Health Education Integration)",
+        "daily-plan (template/panel rendering)"
+      ],
+      "source_files": [
+        "avs SheetAction.java, Wizard.js, ContentEditor.js, InfoSheetsAction.java",
+        "daily-plan tdpApp/server/pdf/index.js"
+      ],
+      "local_equivalent": "reports-service (Gotenberg PDF, scheduled jobs) + clinical-doc-service (Composition) + documents-core + healthstack-education-service (scaffold) + notify-service",
+      "local_gaps": [
+        "no AVS assembler aggregating demographics/vitals/labs/meds/allergies/appointments into one person document",
+        "no provider content-customization editor",
+        "no health-education (Krames-style) integration",
+        "no print-to-VistA/PDF/portal multi-destination"
+      ],
+      "suggested_representation": {
+        "trigger": "encounter signed/closed -> auto-generate AVS; provider opens AVS wizard",
+        "states": [
+          "context-loaded",
+          "data-aggregated",
+          "rendered-draft",
+          "provider-customized",
+          "finalized",
+          "delivered (print/PDF/portal)"
+        ],
+        "actors": [
+          "provider (review/customize)",
+          "person (recipient/owner)",
+          "admin (facility template config)"
+        ],
+        "permissions": "provider customize; person owns delivered AVS; admin configures sections/translations; ConsentGuard on PHI",
+        "entities": [
+          "encounter context",
+          "AVS document (Composition)",
+          "facility template/prefs",
+          "education content links"
+        ],
+        "apis": [
+          "reports-service PDF",
+          "clinical-doc Composition",
+          "documents-core store",
+          "healthstack-education content"
+        ],
+        "ui": [
+          "provider AVS wizard + content/comments editor (TinyMCE analog)",
+          "admin section/translation config (builder-studio)",
+          "patient-app AVS viewer + download"
+        ],
+        "jobs": [
+          "parallel data-collection on generate (avs thread-fan-out pattern)",
+          "auto-deliver to portal on finalize"
+        ],
+        "integrations": [
+          "all clinical domains for aggregation",
+          "health-education content provider via integrations-core",
+          "i18n/translations"
+        ],
+        "notifications": [
+          "AVS ready to person (notify multi-channel)"
+        ],
+        "audit": "audit-core on generate/customize/deliver; usage log",
+        "failure_modes": [
+          "partial data aggregation",
+          "stale facility config",
+          "print/PDF render failure",
+          "language/i18n gap"
+        ],
+        "tests": [
+          "data-aggregation completeness test",
+          "PDF render test",
+          "i18n section test",
+          "portal delivery test"
+        ]
+      },
+      "person_centric_reshape": "AVS is already person-output but generated through a provider/admin wizard. Re-center fully: the person automatically receives a clear, translated, education-linked summary in patient-app the moment the visit closes (no provider step required for the baseline), with provider customization optional. The facility's section/disclaimer/translation governance is preserved as defaults, satisfying compliance while the person gets a genuinely useful takeaway.",
+      "implementation_mode": "local native workflow-core (post-encounter AVS process) + reports-service (Gotenberg PDF) + clinical-doc + documents-core; parallel aggregation via automation-core; education via integrations-core; build healthstack-education-service"
+    },
+    {
+      "id": "hc.maternity",
+      "domain": "healthcare",
+      "name": "Maternity / Pregnancy Tracking",
+      "category": "clinical",
+      "source_systems": [
+        "maternity-tracker (8 workflows: flag eval, DDCS push, pregnancy/outcome, education, outreach calls, observation capture, CDA authoring, portal)"
+      ],
+      "source_files": [
+        "maternity-tracker Routines/DSIO5.m, DSIO12.m, DSIO15.m, DSIO01-04.m",
+        "Dashboard/va.gov.artemis.ui PatientContactController.cs, EducationController.cs"
+      ],
+      "local_equivalent": "healthstack-careplans-service (scaffold) + healthstack-patient + orders/observations + clinical-doc (CDA bridge) + healthstack-education (scaffold) + notify (outreach)",
+      "local_gaps": [
+        "healthstack-careplans-service scaffold-only",
+        "no pregnancy episode model (EDC, gestational age, baby records, outcomes)",
+        "no high-risk flag evaluation",
+        "no scheduled outreach-call workflow (postpartum/breastfeeding assessment)",
+        "no CDA registry authoring"
+      ],
+      "suggested_representation": {
+        "trigger": "pregnancy confirmed -> care plan started; scheduled flag-eval and outreach windows",
+        "states": [
+          "pregnancy-registered",
+          "prenatal-tracking",
+          "high-risk-flagged",
+          "delivered",
+          "postpartum",
+          "outcome-recorded",
+          "closed"
+        ],
+        "actors": [
+          "maternity care coordinator",
+          "OB provider/nurse",
+          "person (pregnant individual)",
+          "baby record"
+        ],
+        "permissions": "coordinator/provider write; person owns own timeline; ConsentGuard; sensitive (IPV/depression) extra protection",
+        "entities": [
+          "pregnancy episode (EDC/type/provider)",
+          "baby records (APGAR/weight)",
+          "observations/flowsheet",
+          "education assignments",
+          "outreach-call outcomes",
+          "CDA document"
+        ],
+        "apis": [
+          "healthstack-careplans",
+          "orders/observations",
+          "clinical-doc CDA",
+          "terminology SNOMED/LOINC",
+          "notify"
+        ],
+        "ui": [
+          "coordinator high-risk worklist",
+          "clinician flowsheet entry",
+          "patient-app pregnancy timeline + education + self-tracking + appointment view"
+        ],
+        "jobs": [
+          "DSIO-style scheduled flag evaluation (consults/labs/problems)",
+          "outreach-call window scheduler (2-4wk postpartum)",
+          "education distribution",
+          "CDA push to registry"
+        ],
+        "integrations": [
+          "IHE/CDA registry",
+          "education content",
+          "terminology"
+        ],
+        "notifications": [
+          "education + appointment + outreach to person; high-risk alert to coordinator"
+        ],
+        "audit": "audit-core; sensitive-assessment extra protection",
+        "failure_modes": [
+          "missed high-risk flag",
+          "outreach window missed",
+          "sensitive data over-exposure",
+          "CDA push failure"
+        ],
+        "tests": [
+          "flag-eval scheduled test",
+          "outreach-window scheduler test",
+          "sensitive-data consent test",
+          "CDA author test"
+        ]
+      },
+      "person_centric_reshape": "Maternity-tracker is care-coordinator-worklist-centric with a pilot portal. Re-center on the pregnant person's journey: their own pregnancy timeline, milestones, education delivered at the right week, self-tracking, and gentle outreach they experience as support (not org call-tracking). The coordinator's high-risk flagging, outcome capture, CDA registry, and outreach-compliance are preserved as the safety + reporting layer riding on that journey.",
+      "implementation_mode": "local native workflow-core (pregnancy-episode care plan) + build healthstack-careplans-service + clinical-doc CDA; scheduled flag-eval + outreach via automation-core (DSIO scheduled-task pattern); education via integrations-core"
+    },
+    {
+      "id": "hc.family_history",
+      "domain": "healthcare",
+      "name": "Family-History Capture",
+      "category": "clinical",
+      "source_systems": [
+        "FamilyHistoryCPRS (6 workflows: create patient entry, add relative, add disease, create FH note, load/display, edit)"
+      ],
+      "source_files": [
+        "FamilyHistoryCPRS fFamHistEdit.pas, fFamHistory.pas, rFamHistory.pas (CreateFHNote)"
+      ],
+      "local_equivalent": "healthstack-problems-service (scaffold) + clinical-doc (FH note as Composition) + terminology (relationships/conditions) + builder-core (structured form)",
+      "local_gaps": [
+        "no family-history data model (relatives, relationships, conditions w/ age-at-dx, ancestry)",
+        "no FH structured capture form",
+        "no auto-generate FH clinical note",
+        "no risk-relevant FH surfacing (ties to triage/CDS)"
+      ],
+      "suggested_representation": {
+        "trigger": "person self-reports family history (patient-app) OR clinician captures during encounter",
+        "states": [
+          "draft",
+          "relatives-added",
+          "conditions-added",
+          "reviewed",
+          "note-generated",
+          "updated"
+        ],
+        "actors": [
+          "person (best source of own family history)",
+          "clinician (verify/use)"
+        ],
+        "permissions": "person edits own FH; clinician verify/annotate; ConsentGuard",
+        "entities": [
+          "FH patient entry (ancestry flags)",
+          "relative (relationship, vital status, ages)",
+          "relative-condition (disease, age-at-dx)",
+          "FH note (Composition)"
+        ],
+        "apis": [
+          "healthstack-problems FH model",
+          "terminology (relationship + condition codes)",
+          "clinical-doc note generation"
+        ],
+        "ui": [
+          "patient-app guided FH wizard (tree by relative)",
+          "clinician-app FH summary + cover sheet",
+          "builder-core reference-data driven form"
+        ],
+        "jobs": [
+          "FH note auto-generation on save (CreateFHNote analog)",
+          "FH-driven risk flag surfacing -> CDS/triage"
+        ],
+        "integrations": [
+          "terminology relationships/conditions/age-ranges (reference data via RPC analog)"
+        ],
+        "notifications": [
+          "FH-based screening recommendation to person"
+        ],
+        "audit": "audit-core on FH edits; provider attribution",
+        "failure_modes": [
+          "incomplete pedigree",
+          "no-reply reason handling",
+          "condition coding gaps",
+          "stale FH not re-asked"
+        ],
+        "tests": [
+          "FH wizard save test",
+          "auto-note generation test",
+          "FH-driven screening rec test"
+        ]
+      },
+      "person_centric_reshape": "FamilyHistoryCPRS is a clinician Delphi dialog with provider-DUZ on every RPC. Re-center: the person builds their own family tree at home (they know it best), choosing relatives and conditions in a friendly wizard; the clinician verifies and the system auto-generates the structured note and surfaces relevant screening recommendations to the person. The clinical-note + coded-pedigree requirements are preserved, sourced from the person instead of extracted by a clinician under time pressure.",
+      "implementation_mode": "local native workflow-core (FH capture) + build FH model in healthstack-problems-service + builder-core form (reference-data-driven) + clinical-doc auto-note; FH-risk feeds hc.triage CDS"
+    },
+    {
+      "id": "hc.procedural_checklist",
+      "domain": "healthcare",
+      "name": "Procedural / Pre-procedure Checklist",
+      "category": "clinical",
+      "source_systems": [
+        "preproc-checklist (Assign, Complete, Close, Refresh items, Audit Logging)",
+        "coms (treatment plan checklist)"
+      ],
+      "source_files": [
+        "preproc-checklist ac_assign_checklist.aspx.cs, sp_single_patient.aspx.cs, CPatChecklistData.cs, CPatientChecklistLogic.cs"
+      ],
+      "local_equivalent": "builder-core-service (form/schema builder, validation rules) + tasks-core (checklist items as tasks) + workflow-core (assign/complete/close lifecycle) + clinical-doc (resulting note)",
+      "local_gaps": [
+        "no checklist template -> patient-instance assignment model",
+        "no logic engine for dependent-item evaluation (expressions, visibility)",
+        "no auto-refresh of items from live lab/vitals data",
+        "no checklist->TIU/clinical-note on close"
+      ],
+      "suggested_representation": {
+        "trigger": "procedure scheduled -> checklist assigned (template + procedure date)",
+        "states": [
+          "assigned/open",
+          "in-progress",
+          "items-evaluated",
+          "blocked (failed item)",
+          "complete",
+          "closed (note created)"
+        ],
+        "actors": [
+          "clinician",
+          "pre-op nurse",
+          "person (self-report items)",
+          "admin (close)"
+        ],
+        "permissions": "clinician/nurse mark items; person self-reports own prep items; ConsentGuard",
+        "entities": [
+          "checklist template",
+          "patient-checklist instance",
+          "checklist item (state Good/Bad/Unknown)",
+          "logic expressions",
+          "resulting note"
+        ],
+        "apis": [
+          "builder-core schema/validation",
+          "tasks-core items",
+          "workflow-core lifecycle",
+          "clinical-doc note"
+        ],
+        "ui": [
+          "clinician single-patient checklist",
+          "patient-app pre-procedure prep checklist (self-report)",
+          "admin assignment"
+        ],
+        "jobs": [
+          "refresh/re-evaluate logic from live labs/vitals (scheduled batch + on-demand)",
+          "incomplete-checklist nag before procedure"
+        ],
+        "integrations": [
+          "live labs/vitals (orders-service) to auto-fill items",
+          "builder-core logic engine"
+        ],
+        "notifications": [
+          "prep reminders to person; blocked-item alert to clinician"
+        ],
+        "audit": "audit-core full (user/IP/timestamp/change detail) - preproc FX_AUDIT analog",
+        "failure_modes": [
+          "dependent-item not re-evaluated",
+          "stale lab data",
+          "procedure proceeds with failed item",
+          "incomplete prep"
+        ],
+        "tests": [
+          "logic-engine dependent-item test",
+          "auto-refresh from labs test",
+          "close->note test",
+          "audit-detail test"
+        ]
+      },
+      "person_centric_reshape": "preproc-checklist is clinician-form-centric (ASPX single-patient page). Re-center so the person owns their prep: they get a friendly pre-procedure checklist (fasting, meds-to-hold, transport) on their phone, self-report what they can, and the clinical/safety items auto-fill from live data. The org's logic-engine, dependent-item evaluation, refresh, and full audit are preserved as the clinical-safety completeness layer; the person experiences readiness, not a form.",
+      "implementation_mode": "local native workflow-core (checklist lifecycle) + builder-core (template + logic/validation engine) + tasks-core items; auto-refresh from orders-service via automation-core; close emits clinical-doc note"
+    },
+    {
+      "id": "hc.discharge",
+      "domain": "healthcare",
+      "name": "Discharge (ADT)",
+      "category": "clinical",
+      "source_systems": [
+        "vista-m (ADT analog)",
+        "openmrs ADT",
+        "maternity (delivery->postpartum transition)"
+      ],
+      "source_files": [
+        "healthstack-patient admission saga (local)",
+        "corpus ADT patterns"
+      ],
+      "local_equivalent": "healthstack-patient-service (admission saga, in-memory FK pending M9) + healthstack-interop-service (scaffold, HL7v2 ADT TBD) + clinical-doc (discharge summary) + tasks-core (discharge tasks) + hc.avs",
+      "local_gaps": [
+        "healthstack-interop-service scaffold-only (HL7v2 ADT/C-CDA TBD)",
+        "discharge saga (orders reconciliation, med reconciliation, follow-up scheduling, education) not fully modeled",
+        "no discharge-instruction person document beyond AVS",
+        "admission saga FK in-memory (data-truth)"
+      ],
+      "suggested_representation": {
+        "trigger": "provider initiates discharge",
+        "states": [
+          "discharge-ordered",
+          "med-reconciled",
+          "pending-tasks-clear",
+          "education-given",
+          "follow-up-scheduled",
+          "discharge-summary-signed",
+          "discharged",
+          "transferred"
+        ],
+        "actors": [
+          "provider",
+          "discharge nurse/care coordinator",
+          "pharmacist (med rec)",
+          "person"
+        ],
+        "permissions": "provider order; nurse coordinate; ConsentGuard; ADT events tenant-scoped",
+        "entities": [
+          "encounter/admission",
+          "med reconciliation",
+          "discharge summary (Composition)",
+          "follow-up appointments/tasks",
+          "ADT message"
+        ],
+        "apis": [
+          "healthstack-patient saga",
+          "clinical-doc summary",
+          "scheduling follow-up",
+          "orders med-rec",
+          "interop ADT publish"
+        ],
+        "ui": [
+          "nurse discharge worklist (tasks gating)",
+          "patient-app discharge instructions + meds + follow-up + warning signs"
+        ],
+        "jobs": [
+          "pending-order/result-block check before discharge",
+          "follow-up auto-schedule",
+          "ADT event publish (outbox)",
+          "readmission-risk follow-up call scheduling"
+        ],
+        "integrations": [
+          "HL7v2 ADT via interop",
+          "scheduling follow-up",
+          "pharmacy med-rec"
+        ],
+        "notifications": [
+          "discharge instructions + follow-up to person; ADT to downstream systems"
+        ],
+        "audit": "audit-core; ADT event chain",
+        "failure_modes": [
+          "discharge with unresolved orders/results",
+          "med-rec skipped",
+          "no follow-up booked -> readmission",
+          "ADT publish failure",
+          "saga FK loss (in-memory)"
+        ],
+        "tests": [
+          "discharge-block-on-pending test",
+          "med-rec gate test",
+          "follow-up auto-schedule test",
+          "ADT outbox test",
+          "saga Postgres persistence test"
+        ]
+      },
+      "person_centric_reshape": "ADT discharge in legacy systems is an inpatient state-flag + downstream messaging event. Re-center on the person leaving safely: a clear discharge plan (meds, follow-up already booked, warning signs, who to call) they carry home, with the org's med-reconciliation, order-resolution, ADT messaging, and readmission-prevention requirements satisfied as the gates that make that plan safe and complete.",
+      "implementation_mode": "local native workflow-core (discharge saga) + healthstack-patient (move saga to Postgres) + clinical-doc summary + scheduling; build healthstack-interop-service for HL7v2 ADT; readmission follow-up via automation-core"
+    },
+    {
+      "id": "hc.public_health",
+      "domain": "healthcare",
+      "name": "Public-Health Reporting & Quality Measures",
+      "category": "clinical",
+      "source_systems": [
+        "pophealth (Measure Import, Quality Calculation map-reduce, Patient Import, Cohort Filter, QRDA/Excel Report)",
+        "aware (QI compliance reporting)"
+      ],
+      "source_files": [
+        "pophealth lib/measures/loader.rb, lib/qme_ext/quality_report.rb, reports_controller.rb, queries_controller.rb",
+        "aware AwareQIManager Default.aspx.cs"
+      ],
+      "local_equivalent": "healthstack-quality-service (scaffold, HEDIS/CMS eCQM TBD) + reports-service (scheduled, Superset) + search-service (cohort) + terminology (value sets)",
+      "local_gaps": [
+        "healthstack-quality-service scaffold-only",
+        "no measure definition (HQMF/eCQM) import + value-set loading",
+        "no map-reduce quality calculation engine",
+        "no cohort/population filter",
+        "no QRDA Cat I/III export",
+        "no public-health case reporting (eCR) export"
+      ],
+      "suggested_representation": {
+        "trigger": "measure imported; periodic calculation; reportable-condition detected (eCR)",
+        "states": [
+          "measure-loaded",
+          "valuesets-resolved",
+          "population-defined",
+          "calculating",
+          "results-aggregated",
+          "report-generated",
+          "submitted"
+        ],
+        "actors": [
+          "quality analyst",
+          "public-health reporter",
+          "admin",
+          "(person via aggregate consent)"
+        ],
+        "permissions": "analyst/admin roles; de-identified/aggregate; ConsentGuard for any identified export; ABAC tenant",
+        "entities": [
+          "measure (eCQM/HQMF)",
+          "value sets",
+          "patient cohort",
+          "measure result (IPP/NUMER/DENOM/DENEX)",
+          "QRDA report"
+        ],
+        "apis": [
+          "healthstack-quality calc",
+          "terminology value-set expand",
+          "reports-service export",
+          "search-service cohort"
+        ],
+        "ui": [
+          "analyst measure dashboard + cohort filter",
+          "admin measure import",
+          "compliance report viewer"
+        ],
+        "jobs": [
+          "scheduled measure calculation (map-reduce over patients - pophealth analog)",
+          "value-set refresh from VSAC/terminology",
+          "QRDA/eCR generation",
+          "reportable-condition scanner (eCR trigger)"
+        ],
+        "integrations": [
+          "VSAC/terminology value sets",
+          "public-health agency submission via integrations-core",
+          "clinical data across domains"
+        ],
+        "notifications": [
+          "calculation-complete to analyst; reportable-condition to public-health reporter"
+        ],
+        "audit": "audit-core on import/calc/export; submission record",
+        "failure_modes": [
+          "value-set stale",
+          "calculation timeout (large pop)",
+          "cohort mis-definition",
+          "QRDA schema invalid",
+          "missed reportable condition"
+        ],
+        "tests": [
+          "measure-calc determinism test",
+          "value-set expand test",
+          "QRDA Cat III schema test",
+          "cohort filter test"
+        ]
+      },
+      "person_centric_reshape": "pophealth and AWARE-QI are pure org/population analytics. Person-centric reshape: surface each person's own care gaps ('you're due for a colonoscopy / A1c') as actionable items in patient-app, derived from the same measure logic; the population-level eCQM/HEDIS calculation, QRDA submission, and QI compliance reporting are preserved as the aggregate roll-up of those per-person gaps. Public-health case reporting still meets mandates, but the person also benefits from gap-closure prompts.",
+      "implementation_mode": "local native workflow-core (measure calc + reporting pipeline) + build healthstack-quality-service (map-reduce calc) + reports-service export + terminology value-sets; reportable-condition + agency submission via integrations-core/automation-core"
+    },
+    {
+      "id": "erp.quote_to_cash",
+      "domain": "erp",
+      "name": "Quote -> Order -> Invoice -> Payment (Order-to-Cash)",
+      "category": "business",
+      "source_systems": [
+        "odoo (Sale Order, Invoice, Payment Reconciliation)",
+        "erpnext (Sales Order, Sales Invoice, Payment Entry)"
+      ],
+      "source_files": [
+        "odoo /addons/sale/models/sale_order.py, account/models/account_move.py, account_bank_statement.py",
+        "erpnext .../sales_order.py, sales_invoice.py, payment_entry.py"
+      ],
+      "local_equivalent": "sales-core-service (quotes/sales orders/commissions, partial) + commerce-core-service (Medusa v2 order state machine, real-working) + accounting-core-service (double-entry ledger, partial) + esign-core (quote sign-off)",
+      "local_gaps": [
+        "sales-core-service partial (quote->order transitions incomplete)",
+        "accounting-core partial (GL posting on invoice/payment not fully wired)",
+        "no payment reconciliation / bank-statement matching",
+        "no order-to-cash orchestration spanning sales+commerce+accounting"
+      ],
+      "suggested_representation": {
+        "trigger": "customer requests quote / accepts quote / order placed",
+        "states": [
+          "quote-draft",
+          "quote-sent",
+          "quote-accepted",
+          "order-confirmed",
+          "fulfilled",
+          "invoiced",
+          "payment-due",
+          "paid",
+          "reconciled"
+        ],
+        "actors": [
+          "customer (person/buyer)",
+          "sales rep",
+          "accountant",
+          "approver (discount/credit)"
+        ],
+        "permissions": "sales create quote; customer self-accept; accountant post GL; approver for discount thresholds; ABAC tenant",
+        "entities": [
+          "sales.Quote",
+          "sales/commerce.Order",
+          "accounting.Invoice (account.move analog)",
+          "Payment",
+          "GL journal entry"
+        ],
+        "apis": [
+          "sales-core",
+          "commerce-core order state machine",
+          "accounting-core ledger post",
+          "esign quote sign"
+        ],
+        "ui": [
+          "customer self-serve quote-accept + order-track + pay portal",
+          "sales rep pipeline",
+          "accountant invoice/payment desk"
+        ],
+        "jobs": [
+          "quote-expiry reminder",
+          "auto-invoice on fulfillment",
+          "payment-reminder dunning",
+          "bank-feed reconciliation (auto-match lines to invoices)"
+        ],
+        "integrations": [
+          "payment provider (Stripe/PayPal bridge via commerce)",
+          "bank feed via integrations-core",
+          "esign"
+        ],
+        "notifications": [
+          "quote sent/accepted, invoice, payment receipt to customer (notify)"
+        ],
+        "audit": "audit-core on every state + GL posting; tamper-evident",
+        "failure_modes": [
+          "quote expiry",
+          "credit-limit breach",
+          "payment failure",
+          "reconciliation variance",
+          "double-invoice"
+        ],
+        "tests": [
+          "quote->order->invoice->payment e2e",
+          "GL posting reconciliation test",
+          "bank-match auto-reconcile test",
+          "commerce state-machine test"
+        ]
+      },
+      "person_centric_reshape": "Odoo/ERPNext order-to-cash is accountant/sales-rep-screen-centric with multi-step posting. Re-center on the buyer: self-serve quote acceptance, transparent order tracking, one-click pay, and clear receipts. The org's GL posting, tax computation, AR tracking, discount-approval, and bank reconciliation are preserved (no feature loss) but run behind the buyer-facing flow, and the multi-step accounting is simplified via automation/defaults as a CuraOS advantage.",
+      "implementation_mode": "local native workflow-core (order-to-cash process) + sales-core + commerce-core (order state machine) + accounting-core ledger; payment reconciliation as automation-core + integrations-core bank-feed connector"
+    },
+    {
+      "id": "erp.procure_to_pay",
+      "domain": "erp",
+      "name": "Purchase Requisition -> PO -> Receipt -> Bill (Procure-to-Pay)",
+      "category": "business",
+      "source_systems": [
+        "odoo (Purchase Order, Inventory Transfer)",
+        "erpnext (Purchase Order, Purchase Invoice, Stock Entry)"
+      ],
+      "source_files": [
+        "odoo /addons/purchase/models/purchase_order.py, stock/models/stock_picking.py",
+        "erpnext .../purchase_order.py, purchase_invoice.py, stock_entry.py"
+      ],
+      "local_equivalent": "procurement-core-service (vendor mgmt, RFQ, PO approval, 3-way match, partial) + inventory-core-service (stock, POs, partial) + accounting-core (AP) ",
+      "local_gaps": [
+        "procurement-core partial (RFQ/PO-approval/3-way-match not fully implemented)",
+        "inventory-core partial",
+        "no PR->PO->receipt->bill orchestration",
+        "3-way match (PO/receipt/invoice) not wired to accounting AP posting"
+      ],
+      "suggested_representation": {
+        "trigger": "requester creates purchase requisition",
+        "states": [
+          "PR-draft",
+          "PR-approved",
+          "RFQ-sent",
+          "PO-created",
+          "PO-approved",
+          "goods-received",
+          "3-way-matched",
+          "bill-posted",
+          "paid"
+        ],
+        "actors": [
+          "requester (person/employee)",
+          "buyer",
+          "approver",
+          "warehouse receiver",
+          "AP accountant"
+        ],
+        "permissions": "requester create PR; approver thresholds; buyer issue PO; receiver confirm; AP post; ABAC tenant",
+        "entities": [
+          "purchase requisition",
+          "RFQ",
+          "purchase order",
+          "goods receipt (stock entry)",
+          "vendor bill",
+          "AP journal entry"
+        ],
+        "apis": [
+          "procurement-core",
+          "inventory-core stock",
+          "accounting-core AP post"
+        ],
+        "ui": [
+          "requester self-serve PR + status",
+          "buyer RFQ/PO desk",
+          "receiver goods-receipt",
+          "AP bill desk"
+        ],
+        "jobs": [
+          "PR approval routing",
+          "3-way match automation",
+          "bill-due payment scheduling"
+        ],
+        "integrations": [
+          "vendor portal via integrations-core",
+          "accounting AP",
+          "inventory bin update"
+        ],
+        "notifications": [
+          "PR approved/rejected to requester; PO to vendor; receipt confirmation; bill due"
+        ],
+        "audit": "audit-core on approvals/receipts/match/posting",
+        "failure_modes": [
+          "3-way match variance",
+          "over-receipt",
+          "unapproved PR proceeds",
+          "duplicate bill",
+          "budget overrun"
+        ],
+        "tests": [
+          "PR->PO->receipt->bill e2e",
+          "3-way-match variance test",
+          "approval-threshold routing test",
+          "AP posting reconciliation"
+        ]
+      },
+      "person_centric_reshape": "Procure-to-pay in Odoo/ERPNext is buyer/AP-screen-centric. Re-center on the requester: an employee self-serves a simple 'I need X' request, sees real-time approval and delivery status, with the procurement rigor (RFQ, approval thresholds, 3-way match, AP posting) preserved behind it. The vendor also gets a clean self-serve portal. Org spend-control compliance is satisfied as a consequence of a clear requester journey.",
+      "implementation_mode": "local native workflow-core (procure-to-pay + approval routing) + procurement-core + inventory-core + accounting-core AP; 3-way match as custom state machine within procurement-core; vendor portal via integrations-core"
+    },
+    {
+      "id": "erp.inventory_reorder",
+      "domain": "erp",
+      "name": "Inventory Reorder / Replenishment",
+      "category": "business",
+      "source_systems": [
+        "odoo (Inventory Transfer, Manufacturing/MRP, Scheduled Jobs)",
+        "erpnext (Stock Entry, Work Order)",
+        "bahmni (Odoo Inventory Integration - medical stock)"
+      ],
+      "source_files": [
+        "odoo /addons/stock/models/stock_picking.py, mrp/models/mrp_production.py, ir_cron*.xml",
+        "erpnext stock_entry.py, work_order.py"
+      ],
+      "local_equivalent": "inventory-core-service (stock levels, warehouse, lot/expiration, partial) + procurement-core (auto-PO) + automation-core (scheduled reorder scan)",
+      "local_gaps": [
+        "inventory-core partial",
+        "no reorder-point / min-max replenishment rule engine",
+        "no auto-PO generation on low stock",
+        "no MRP/demand-explosion (manufacturing)",
+        "no expiration/lot reorder (medical-inventory)"
+      ],
+      "suggested_representation": {
+        "trigger": "scheduled stock scan OR stock movement drops below reorder point",
+        "states": [
+          "below-reorder-detected",
+          "replenishment-proposed",
+          "PO-auto-created",
+          "approved",
+          "ordered",
+          "received",
+          "stock-restored"
+        ],
+        "actors": [
+          "inventory manager",
+          "buyer (approve auto-PO)",
+          "system (automated scan)"
+        ],
+        "permissions": "manager configure reorder rules; buyer approve auto-PO; ABAC by warehouse/tenant",
+        "entities": [
+          "stock level / bin",
+          "reorder rule (min/max/point)",
+          "replenishment proposal",
+          "auto-generated PO"
+        ],
+        "apis": [
+          "inventory-core stock",
+          "procurement-core PO create",
+          "automation-core scheduled action"
+        ],
+        "ui": [
+          "inventory manager reorder dashboard",
+          "reorder-rule config",
+          "auto-PO approval queue"
+        ],
+        "jobs": [
+          "scheduled reorder-point scan (odoo ir_cron analog)",
+          "expiration-driven replenishment",
+          "demand forecast / MRP explosion"
+        ],
+        "integrations": [
+          "procurement-core auto-PO",
+          "supplier lead-time data"
+        ],
+        "notifications": [
+          "low-stock + auto-PO-created to manager; stockout warning"
+        ],
+        "audit": "audit-core on rule changes + auto-PO creation",
+        "failure_modes": [
+          "stockout despite rule",
+          "over-order",
+          "reorder loop",
+          "expiration miss (medical)",
+          "forecast error"
+        ],
+        "tests": [
+          "reorder-point trigger test",
+          "auto-PO generation test",
+          "expiration-replenish test",
+          "min/max rule test"
+        ]
+      },
+      "person_centric_reshape": "Inventory replenishment is inherently org-operational, but re-center the person who depends on stock: in healthstack the 'person' is the patient/clinician who must never face a stockout of a needed medication/supply, so reorder rules prioritize patient-critical and expiration-sensitive items; the inventory manager's min/max/MRP machinery is preserved. For business, the storefront customer never sees out-of-stock for fast movers.",
+      "implementation_mode": "local native automation-core (scheduled reorder scan + conditional branching) + inventory-core reorder rules + procurement-core auto-PO; MRP as custom logic in inventory/manufacturing; cron via automation-core (ir_cron pattern)"
+    },
+    {
+      "id": "erp.contract",
+      "domain": "erp",
+      "name": "Contract Create / Renewal",
+      "category": "business",
+      "source_systems": [
+        "erpnext (Subscription/contract patterns)",
+        "suitecrm (contract module)",
+        "odoo (recurring)"
+      ],
+      "source_files": [
+        "erpnext process_subscription.py",
+        "frappe auto_repeat.py (scheduled doc generation)"
+      ],
+      "local_equivalent": "esign-core-service (multi-party envelopes, eIDAS/UETA, real-working) + documents-core + workflow-core (contract lifecycle) + notify (renewal alerts) + recurrence package (scaffold)",
+      "local_gaps": [
+        "no contract entity/lifecycle service (contract.create/active/renewal/expire)",
+        "recurrence package scaffold-only (renewal scheduling)",
+        "no renewal-alert automation",
+        "no contract->billing-schedule link"
+      ],
+      "suggested_representation": {
+        "trigger": "contract drafted; renewal window approaches (scheduled)",
+        "states": [
+          "draft",
+          "sent-for-signature",
+          "executed/active",
+          "renewal-due",
+          "renewed",
+          "amended",
+          "expired/terminated"
+        ],
+        "actors": [
+          "account manager",
+          "customer (signer)",
+          "legal (review)",
+          "approver"
+        ],
+        "permissions": "AM draft; customer sign (esign); legal review gate; ABAC tenant",
+        "entities": [
+          "contract",
+          "esign envelope",
+          "renewal schedule",
+          "linked billing schedule"
+        ],
+        "apis": [
+          "esign-core envelope",
+          "documents-core store",
+          "workflow-core lifecycle",
+          "recurrence renewal scheduling"
+        ],
+        "ui": [
+          "AM contract desk",
+          "customer self-serve sign + view contract",
+          "renewal dashboard"
+        ],
+        "jobs": [
+          "renewal-due scan (auto_repeat analog)",
+          "auto-draft renewal contract",
+          "expiry warning"
+        ],
+        "integrations": [
+          "esign provider bridge",
+          "billing/subscription link"
+        ],
+        "notifications": [
+          "sign request, executed, renewal-due to customer + AM"
+        ],
+        "audit": "audit-core + esign chain-of-custody",
+        "failure_modes": [
+          "renewal missed (auto-lapse)",
+          "unsigned contract active",
+          "amendment versioning conflict",
+          "expiry without notice"
+        ],
+        "tests": [
+          "contract sign->active e2e",
+          "renewal-due automation test",
+          "esign chain-of-custody test"
+        ]
+      },
+      "person_centric_reshape": "Contract/renewal in ERP is account-manager-document-centric. Re-center on the customer: they sign in one tap, always have a clear copy, see renewal terms ahead of time with no surprise auto-renewal, and can self-serve renew/amend. The org's signature legality (eIDAS/UETA), versioning, approval, and renewal-revenue tracking are preserved as the trust + revenue layer behind a transparent customer experience.",
+      "implementation_mode": "local native workflow-core (contract lifecycle) + esign-core + documents-core; renewal scheduling via recurrence package + automation-core (auto_repeat pattern)"
+    },
+    {
+      "id": "erp.subscription_billing",
+      "domain": "erp",
+      "name": "Subscription Billing",
+      "category": "business",
+      "source_systems": [
+        "erpnext (Subscription Invoice Generation)",
+        "frappe (AutoRepeat)",
+        "odoo (recurring/scheduled jobs)",
+        "suitecrm-core (scheduled reports analog)"
+      ],
+      "source_files": [
+        "erpnext process_subscription.py",
+        "frappe auto_repeat.py"
+      ],
+      "local_equivalent": "commerce-core (Medusa, Stripe/PayPal) + accounting-core (recurring invoice) + recurrence package (scaffold) + automation-core (scheduled generation) + donation-core (recurring donation analog)",
+      "local_gaps": [
+        "recurrence package scaffold-only",
+        "no subscription entity + billing-schedule engine",
+        "no scheduled invoice generation from subscription",
+        "no dunning/failed-payment retry ladder"
+      ],
+      "suggested_representation": {
+        "trigger": "billing-schedule cycle date reached (cron)",
+        "states": [
+          "active",
+          "invoice-generated",
+          "payment-attempted",
+          "paid",
+          "payment-failed",
+          "retry",
+          "dunning",
+          "past-due",
+          "cancelled",
+          "renewed"
+        ],
+        "actors": [
+          "subscriber (person/customer)",
+          "billing admin",
+          "system (scheduled)"
+        ],
+        "permissions": "customer manage own subscription (pause/cancel); admin override; ABAC tenant",
+        "entities": [
+          "subscription",
+          "billing schedule",
+          "recurring invoice",
+          "payment",
+          "dunning record"
+        ],
+        "apis": [
+          "accounting-core invoice",
+          "commerce payment",
+          "recurrence schedule",
+          "automation-core cron"
+        ],
+        "ui": [
+          "customer self-serve subscription portal (pause/upgrade/cancel)",
+          "billing admin dashboard"
+        ],
+        "jobs": [
+          "scheduled invoice generation (process_subscription analog)",
+          "payment retry ladder",
+          "dunning escalation",
+          "renewal handling"
+        ],
+        "integrations": [
+          "payment provider",
+          "accounting GL",
+          "notify dunning"
+        ],
+        "notifications": [
+          "upcoming charge, receipt, failed-payment, dunning to subscriber"
+        ],
+        "audit": "audit-core on charges/changes/cancellations",
+        "failure_modes": [
+          "failed payment (retry/dunning)",
+          "proration error",
+          "duplicate invoice",
+          "involuntary churn",
+          "schedule drift"
+        ],
+        "tests": [
+          "scheduled-generation test",
+          "payment-retry ladder test",
+          "proration test",
+          "cancel mid-cycle test"
+        ]
+      },
+      "person_centric_reshape": "Subscription billing in ERP is a scheduler producing invoices behind the scenes. Re-center on the subscriber: full self-serve control (pause, upgrade, cancel anytime), clear upcoming-charge notice, and graceful failed-payment handling that informs rather than silently churns. The org's recurring revenue, proration, GL posting, and dunning are preserved; involuntary churn is reduced as a CuraOS advantage.",
+      "implementation_mode": "local native automation-core (scheduled invoice generation + retry/dunning ladder) + recurrence package + accounting-core + commerce payment; cron via automation-core (auto_repeat/ir_cron pattern)"
+    },
+    {
+      "id": "erp.expense_approval",
+      "domain": "erp",
+      "name": "Expense Approval",
+      "category": "business",
+      "source_systems": [
+        "erpnext (HR/expenses + approval)",
+        "frappe (Workflow state machine, AssignmentRule)",
+        "windmill/activepieces (approval loop)"
+      ],
+      "source_files": [
+        "frappe workflow.py, model/workflow.py, assignment_rule.py",
+        "windmill approvals.rs",
+        "activepieces flow-run pause/resume"
+      ],
+      "local_equivalent": "hr-core-service (expenses, partial) + workflow-core-service (human tasks, BPMN approval) + business-automation-service (approval gate) + notify",
+      "local_gaps": [
+        "hr-core partial (expense submission/approval not fully built)",
+        "no expense->reimbursement->accounting posting chain",
+        "approval-routing rules (amount thresholds, AssignmentRule analog) not configured"
+      ],
+      "suggested_representation": {
+        "trigger": "employee submits expense claim",
+        "states": [
+          "submitted",
+          "auto-routed",
+          "manager-approved",
+          "finance-approved",
+          "reimbursed",
+          "rejected",
+          "clarification-requested"
+        ],
+        "actors": [
+          "employee (person)",
+          "manager (approver)",
+          "finance (approver)",
+          "system (routing)"
+        ],
+        "permissions": "employee submit own; manager approve direct reports; finance threshold; ABAC tenant; segregation of duties",
+        "entities": [
+          "expense claim",
+          "receipt (storage-ref)",
+          "approval record",
+          "reimbursement payment",
+          "GL entry"
+        ],
+        "apis": [
+          "hr-core expense",
+          "workflow-core human-task approval",
+          "accounting-core post",
+          "storage receipts"
+        ],
+        "ui": [
+          "employee mobile expense submit (photo receipt)",
+          "manager approval inbox",
+          "finance batch reimburse"
+        ],
+        "jobs": [
+          "approval routing by amount/category (AssignmentRule analog)",
+          "approval-timeout escalation",
+          "reimbursement batch"
+        ],
+        "integrations": [
+          "accounting reimbursement posting",
+          "storage OCR receipt"
+        ],
+        "notifications": [
+          "approval request to manager; approved/rejected/reimbursed to employee"
+        ],
+        "audit": "audit-core on submission/approval/payment; SoD enforced",
+        "failure_modes": [
+          "approval bottleneck",
+          "policy violation slips through",
+          "duplicate receipt",
+          "reimbursement delay"
+        ],
+        "tests": [
+          "amount-threshold routing test",
+          "approval-timeout escalation test",
+          "SoD test",
+          "reimburse->GL post test"
+        ]
+      },
+      "person_centric_reshape": "Expense approval in ERP is an org approval-chain doctype. Re-center on the employee: snap a receipt on mobile, submit in seconds, see exactly where the approval is and when reimbursement lands. The org's policy enforcement, threshold routing, segregation of duties, and accounting posting are preserved as the control layer behind a fast, transparent employee experience.",
+      "implementation_mode": "local native workflow-core (human-approval BPMN) + hr-core expense + accounting-core; routing rules as automation-core (AssignmentRule/Frappe-workflow pattern); approval pause/resume mirrors windmill/activepieces approval loop"
+    },
+    {
+      "id": "erp.project_billing",
+      "domain": "erp",
+      "name": "Project / Task / Timesheet Billing",
+      "category": "business",
+      "source_systems": [
+        "odoo (Project Task Management)",
+        "erpnext (project/timesheet)",
+        "frappe"
+      ],
+      "source_files": [
+        "odoo /addons/project/models/project_task.py",
+        "erpnext project/timesheet doctypes"
+      ],
+      "local_equivalent": "business-projects-service (scaffold-only) + tasks-core-service (lifecycle, assignment, dependencies, real-working) + accounting-core (invoice) + hr-core (time)",
+      "local_gaps": [
+        "business-projects-service scaffold-only",
+        "no project->task->timesheet->billable->invoice chain",
+        "no time entry / approval",
+        "no billable-rate / WIP tracking"
+      ],
+      "suggested_representation": {
+        "trigger": "project created -> tasks assigned -> time logged",
+        "states": [
+          "project-active",
+          "tasks-in-progress",
+          "time-logged",
+          "time-approved",
+          "billable-computed",
+          "invoiced",
+          "paid"
+        ],
+        "actors": [
+          "project manager",
+          "team member (person logging time)",
+          "client (person)",
+          "accountant"
+        ],
+        "permissions": "member log own time; PM approve; accountant invoice; client view; ABAC tenant",
+        "entities": [
+          "project",
+          "task (tasks-core)",
+          "timesheet entry",
+          "billable line",
+          "project invoice"
+        ],
+        "apis": [
+          "business-projects",
+          "tasks-core",
+          "hr-core time",
+          "accounting-core invoice"
+        ],
+        "ui": [
+          "member time-log (mobile)",
+          "PM project board + approval",
+          "client project portal",
+          "accountant billing"
+        ],
+        "jobs": [
+          "timesheet approval routing",
+          "billable computation",
+          "milestone/periodic invoice generation",
+          "WIP report"
+        ],
+        "integrations": [
+          "accounting invoice",
+          "calendar for time",
+          "tasks-core"
+        ],
+        "notifications": [
+          "time-approval, milestone, invoice to relevant person"
+        ],
+        "audit": "audit-core on time/approval/billing",
+        "failure_modes": [
+          "unbilled time leakage",
+          "time-entry gaps",
+          "scope creep",
+          "invoice dispute"
+        ],
+        "tests": [
+          "time->billable->invoice e2e",
+          "timesheet approval test",
+          "milestone-billing test"
+        ]
+      },
+      "person_centric_reshape": "Project billing in ERP is PM/accountant-grid-centric. Re-center two persons: the team member logs time effortlessly from where they work (calendar-integrated, mobile) and sees their own contribution; the client sees a transparent project portal with progress and clear invoices. The org's WIP, billable-rate, approval, and revenue-recognition rigor are preserved behind both person surfaces.",
+      "implementation_mode": "local native workflow-core (project->billing) + build business-projects-service + tasks-core + hr-core time + accounting-core; finish business-projects-service from scaffold"
+    },
+    {
+      "id": "erp.sales_pipeline",
+      "domain": "erp",
+      "name": "Sales Pipeline (Lead -> Opportunity -> Close)",
+      "category": "business",
+      "source_systems": [
+        "odoo (CRM Pipeline)",
+        "erpnext (CRM, Email Campaign)",
+        "suitecrm (AOW_WorkFlow)"
+      ],
+      "source_files": [
+        "odoo /addons/crm/models/crm_lead.py",
+        "erpnext email_campaign.py",
+        "suitecrm AOW_WorkFlow.php"
+      ],
+      "local_equivalent": "crm-core-service (contacts/companies, opportunity pipeline, activities, partial) + business-automation (recipes) + notify",
+      "local_gaps": [
+        "crm-core partial (pipeline stage automation, probability, auto-assign incomplete)",
+        "no lead auto-assign (round-robin/load-balance, AssignmentRule analog)",
+        "no email-campaign/nurture automation",
+        "no activity/next-action automation"
+      ],
+      "suggested_representation": {
+        "trigger": "lead captured (form/import/webhook)",
+        "states": [
+          "new",
+          "assigned",
+          "qualified",
+          "opportunity",
+          "proposal",
+          "negotiation",
+          "won",
+          "lost"
+        ],
+        "actors": [
+          "sales rep",
+          "sales manager",
+          "lead (person/prospect)"
+        ],
+        "permissions": "rep owns assigned leads; manager all; ABAC tenant; consent for marketing contact",
+        "entities": [
+          "crm.Lead",
+          "Opportunity",
+          "Activity",
+          "Account/Contact",
+          "pipeline stage"
+        ],
+        "apis": [
+          "crm-core",
+          "business-automation recipes",
+          "notify campaign"
+        ],
+        "ui": [
+          "rep kanban pipeline",
+          "manager forecast dashboard",
+          "prospect-facing proposal/portal"
+        ],
+        "jobs": [
+          "lead auto-assign (round-robin)",
+          "stage-aging nudge",
+          "nurture email sequence",
+          "probability/forecast compute"
+        ],
+        "integrations": [
+          "email/marketing via integrations-core",
+          "calendar for meetings",
+          "quote (erp.quote_to_cash)"
+        ],
+        "notifications": [
+          "new-lead to rep; nurture to prospect (consent-gated); stage updates"
+        ],
+        "audit": "audit-core on assignment/stage changes; marketing-consent record",
+        "failure_modes": [
+          "lead never followed up",
+          "stage stagnation",
+          "consent-violating outreach",
+          "double-assignment"
+        ],
+        "tests": [
+          "auto-assign round-robin test",
+          "stage-aging nudge test",
+          "consent-gated campaign test"
+        ]
+      },
+      "person_centric_reshape": "CRM pipelines are pure org/sales-rep funnels. Re-center on the prospect as a person: respect their consent and preferences, give them a genuinely helpful buying journey (clear info, easy proposal acceptance, no spam), so trust drives conversion. The org's pipeline stages, forecasting, auto-assignment, and campaign machinery are preserved but oriented to serving the prospect well, which improves close rates honestly.",
+      "implementation_mode": "local native crm-core pipeline + business-automation/automation-core for assignment + nurture (SuiteCRM AOW_WorkFlow / Odoo CRM pattern); campaigns via notify + integrations-core"
+    },
+    {
+      "id": "erp.customer_onboarding",
+      "domain": "erp",
+      "name": "Customer Onboarding",
+      "category": "business",
+      "source_systems": [
+        "odoo (sale->fulfillment)",
+        "erpnext",
+        "suitecrm"
+      ],
+      "source_files": [
+        "corpus onboarding patterns",
+        "frappe assignment_rule.py (task assignment)"
+      ],
+      "local_equivalent": "crm-core + workflow-core (onboarding process) + tasks-core (onboarding checklist) + esign-core (agreements) + identity-service (account provisioning) + notify",
+      "local_gaps": [
+        "no onboarding orchestration (account setup, agreement sign, kickoff, provisioning)",
+        "no onboarding checklist template",
+        "no welcome-sequence automation"
+      ],
+      "suggested_representation": {
+        "trigger": "deal won / new customer created",
+        "states": [
+          "initiated",
+          "account-provisioned",
+          "agreements-signed",
+          "kickoff-scheduled",
+          "setup-complete",
+          "activated"
+        ],
+        "actors": [
+          "onboarding specialist",
+          "customer (person)",
+          "account manager"
+        ],
+        "permissions": "specialist drive; customer self-complete steps; ABAC tenant",
+        "entities": [
+          "onboarding instance",
+          "checklist tasks",
+          "esign agreements",
+          "provisioned account/tenant"
+        ],
+        "apis": [
+          "workflow-core",
+          "tasks-core",
+          "esign-core",
+          "identity-service provision",
+          "tenancy-core"
+        ],
+        "ui": [
+          "customer self-serve onboarding wizard",
+          "specialist progress dashboard"
+        ],
+        "jobs": [
+          "welcome sequence",
+          "stalled-step nudge",
+          "provisioning automation"
+        ],
+        "integrations": [
+          "identity/tenancy provisioning",
+          "esign",
+          "calendar kickoff"
+        ],
+        "notifications": [
+          "welcome + step prompts + completion to customer"
+        ],
+        "audit": "audit-core on each step + provisioning",
+        "failure_modes": [
+          "stalled onboarding",
+          "incomplete provisioning",
+          "unsigned agreement",
+          "abandoned setup"
+        ],
+        "tests": [
+          "onboarding e2e",
+          "stalled-step nudge test",
+          "provisioning automation test"
+        ]
+      },
+      "person_centric_reshape": "Onboarding is often an internal specialist checklist. Re-center on the customer: a guided self-serve onboarding wizard they drive at their pace, with the specialist as a helper, automated welcome sequence, and clear 'you're all set' moment. The org's provisioning, agreement-signing, and setup-completeness requirements are satisfied as the customer completes their own journey.",
+      "implementation_mode": "local native workflow-core (onboarding process) + tasks-core checklist + esign-core + identity/tenancy provisioning; welcome automation via automation-core"
+    },
+    {
+      "id": "crm.lead_intake",
+      "domain": "crm-insurance-broker",
+      "name": "Lead Intake",
+      "category": "business",
+      "source_systems": [
+        "suitecrm (AOW_WorkFlow, Logic Hooks)",
+        "odoo CRM",
+        "erpnext"
+      ],
+      "source_files": [
+        "suitecrm AOW_WorkFlow.php, custom/.../LogicHooks/AOW_WorkFlow_Hook.php",
+        "suitecrm-core AOW_WorkFlow.php"
+      ],
+      "local_equivalent": "crm-core-service (contacts, partial) + builder-core (intake form) + integrations-core (webhook inbound) + business-automation (logic-hook analog)",
+      "local_gaps": [
+        "no insurance-specific lead intake (coverage interest, current carrier)",
+        "no logic-hook style on-save automation (field updates, record creation)",
+        "no multi-channel intake (web form, webhook, email)"
+      ],
+      "suggested_representation": {
+        "trigger": "prospect submits intake (web form / webhook / email)",
+        "states": [
+          "captured",
+          "deduplicated",
+          "enriched",
+          "assigned",
+          "contacted",
+          "qualified"
+        ],
+        "actors": [
+          "prospect (person)",
+          "broker/agent",
+          "intake coordinator"
+        ],
+        "permissions": "agent owns assigned; coordinator route; consent for contact; ABAC tenant",
+        "entities": [
+          "lead",
+          "contact",
+          "coverage interest",
+          "activity"
+        ],
+        "apis": [
+          "crm-core",
+          "builder-core form",
+          "integrations-core webhook",
+          "automation-core hooks"
+        ],
+        "ui": [
+          "public intake form (builder-core)",
+          "agent lead inbox"
+        ],
+        "jobs": [
+          "dedup/enrich on intake",
+          "auto-assign",
+          "SLA first-contact timer"
+        ],
+        "integrations": [
+          "web form, webhook, email channels via integrations-core",
+          "enrichment"
+        ],
+        "notifications": [
+          "new-lead to agent; acknowledgement to prospect"
+        ],
+        "audit": "audit-core on intake/assignment; consent record",
+        "failure_modes": [
+          "duplicate lead",
+          "slow first contact (SLA breach)",
+          "intake spam",
+          "consent missing"
+        ],
+        "tests": [
+          "multi-channel intake test",
+          "dedup test",
+          "SLA first-contact test"
+        ]
+      },
+      "person_centric_reshape": "SuiteCRM lead intake is a record + logic-hook on save. Re-center on the prospect: a simple, respectful intake that asks only what's needed, confirms receipt immediately, and connects them to a real broker fast (SLA on first contact). The org's dedup, enrichment, assignment, and logic-hook automation are preserved as the behind-the-scenes machinery that makes the prospect feel promptly served.",
+      "implementation_mode": "local native crm-core + builder-core intake form + automation-core (SuiteCRM AOW_WorkFlow/logic-hook pattern); inbound channels via integrations-core webhook"
+    },
+    {
+      "id": "crm.broker_onboarding",
+      "domain": "crm-insurance-broker",
+      "name": "Broker / Customer Onboarding (Insurance)",
+      "category": "business",
+      "source_systems": [
+        "suitecrm (broker hierarchy module)",
+        "esign patterns"
+      ],
+      "source_files": [
+        "suitecrm broker/producer + contract module patterns"
+      ],
+      "local_equivalent": "crm-core (accounts/contacts) + esign-core (producer agreements) + identity-service (broker account) + workflow-core (KYC/appointment process) + documents-core",
+      "local_gaps": [
+        "no broker/producer hierarchy model",
+        "no producer appointment/licensing verification (carrier appointment)",
+        "no KYC/compliance onboarding gate",
+        "no commission-contract setup link"
+      ],
+      "suggested_representation": {
+        "trigger": "new broker recruited / new insured customer onboarded",
+        "states": [
+          "application",
+          "KYC/license-verified",
+          "carrier-appointed",
+          "agreement-signed",
+          "commission-setup",
+          "active"
+        ],
+        "actors": [
+          "broker (person)",
+          "onboarding/compliance officer",
+          "carrier (external)"
+        ],
+        "permissions": "compliance gate; broker self-complete application; ABAC tenant",
+        "entities": [
+          "broker/producer (hierarchy)",
+          "license/appointment record",
+          "producer agreement (esign)",
+          "commission contract",
+          "KYC documents"
+        ],
+        "apis": [
+          "crm-core",
+          "esign-core",
+          "identity provision",
+          "workflow-core KYC",
+          "documents-core"
+        ],
+        "ui": [
+          "broker self-serve application + doc upload",
+          "compliance review queue"
+        ],
+        "jobs": [
+          "license verification check",
+          "appointment status poll",
+          "KYC document-collection nudge"
+        ],
+        "integrations": [
+          "carrier appointment systems via integrations-core",
+          "license verification",
+          "esign"
+        ],
+        "notifications": [
+          "application status, missing docs, activation to broker"
+        ],
+        "audit": "audit-core full KYC/compliance trail",
+        "failure_modes": [
+          "license lapse",
+          "incomplete KYC",
+          "appointment delay",
+          "hierarchy mis-assignment"
+        ],
+        "tests": [
+          "KYC gate test",
+          "license-verification test",
+          "hierarchy assignment test"
+        ]
+      },
+      "person_centric_reshape": "Broker onboarding in CRM is a compliance-officer document chase. Re-center on the broker: a clear self-serve application showing exactly what's needed and where they are, with the compliance/KYC/license/appointment rigor preserved as gates the system manages for them. The insured customer's onboarding similarly becomes a guided self-serve flow rather than an agent-entered record.",
+      "implementation_mode": "local native workflow-core (KYC/onboarding gates) + crm-core (broker hierarchy model) + esign-core + identity provisioning; carrier appointment + license verification via integrations-core"
+    },
+    {
+      "id": "crm.quote_request",
+      "domain": "crm-insurance-broker",
+      "name": "Insurance Quote Request",
+      "category": "business",
+      "source_systems": [
+        "suitecrm (quotes/proposals)",
+        "odoo sale order (analog)"
+      ],
+      "source_files": [
+        "suitecrm quote/proposal module patterns"
+      ],
+      "local_equivalent": "sales-core (quotes, partial) + crm-core + builder-core (rating intake form) + workflow-core (quote process)",
+      "local_gaps": [
+        "no insurance rating/quote engine (coverage lines, premium calc)",
+        "no multi-carrier quote comparison",
+        "no quote->policy bind path"
+      ],
+      "suggested_representation": {
+        "trigger": "customer requests insurance quote",
+        "states": [
+          "request-captured",
+          "risk-data-collected",
+          "rated",
+          "quoted (multi-carrier)",
+          "presented",
+          "accepted->bind",
+          "declined"
+        ],
+        "actors": [
+          "customer (person)",
+          "broker/agent",
+          "underwriter (referral)"
+        ],
+        "permissions": "agent quote; customer self-request/accept; underwriter referral; ABAC tenant",
+        "entities": [
+          "quote request",
+          "risk/coverage data",
+          "rating result",
+          "carrier quotes",
+          "proposal"
+        ],
+        "apis": [
+          "sales-core quote",
+          "builder-core rating form",
+          "workflow-core",
+          "carrier rating connector"
+        ],
+        "ui": [
+          "customer self-serve quote request + compare + accept",
+          "agent quote workbench"
+        ],
+        "jobs": [
+          "rating engine run",
+          "carrier quote fetch",
+          "quote-expiry reminder"
+        ],
+        "integrations": [
+          "carrier rating APIs via integrations-core",
+          "terminology/coverage codes"
+        ],
+        "notifications": [
+          "quote ready, expiring, accepted to customer"
+        ],
+        "audit": "audit-core on quote/rating/accept",
+        "failure_modes": [
+          "rating error",
+          "carrier quote timeout",
+          "quote expiry",
+          "coverage gap"
+        ],
+        "tests": [
+          "rating determinism test",
+          "multi-carrier fetch test",
+          "quote->bind path test"
+        ]
+      },
+      "person_centric_reshape": "Insurance quoting is a broker workbench task. Re-center on the customer: a simple self-serve request, transparent multi-carrier comparison in plain terms, and one-click acceptance to bind, with the broker available to advise. The org's rating rigor, underwriter referral, and carrier integration are preserved behind a transparent comparison the customer controls.",
+      "implementation_mode": "custom state machine for rating/quote + local native workflow-core orchestration + sales-core quote + builder-core rating intake; carrier rating via integrations-core; binds to crm.policy"
+    },
+    {
+      "id": "crm.policy",
+      "domain": "crm-insurance-broker",
+      "name": "Policy Create / Renewal",
+      "category": "business",
+      "source_systems": [
+        "suitecrm (policy/policy-terms/renewals module)",
+        "erpnext subscription (recurring analog)"
+      ],
+      "source_files": [
+        "suitecrm policy module + AOR scheduled reports (renewal alerts)",
+        "frappe auto_repeat.py"
+      ],
+      "local_equivalent": "workflow-core (policy lifecycle) + esign-core (policy docs) + accounting-core (premium billing) + recurrence (renewal schedule, scaffold) + notify (renewal alerts)",
+      "local_gaps": [
+        "no policy entity (terms, coverage lines, premium schedule, installments, beneficiaries)",
+        "no policy lifecycle service",
+        "no renewal automation + premium installment billing",
+        "no endorsement handling (see crm.endorsement)"
+      ],
+      "suggested_representation": {
+        "trigger": "quote accepted -> bind policy; renewal window approaches",
+        "states": [
+          "bound",
+          "active",
+          "installment-due",
+          "renewal-due",
+          "renewed",
+          "lapsed",
+          "cancelled"
+        ],
+        "actors": [
+          "policyholder (person)",
+          "broker",
+          "carrier",
+          "billing"
+        ],
+        "permissions": "broker manage; policyholder view/self-renew; ABAC tenant; beneficiary consent",
+        "entities": [
+          "policy",
+          "policy term",
+          "coverage lines",
+          "premium schedule/installments",
+          "beneficiaries"
+        ],
+        "apis": [
+          "workflow-core lifecycle",
+          "esign policy docs",
+          "accounting premium billing",
+          "recurrence renewal"
+        ],
+        "ui": [
+          "policyholder portal (policy docs, coverage, pay installment, renew)",
+          "broker book-of-business"
+        ],
+        "jobs": [
+          "renewal-due scan (AOR scheduled / auto_repeat analog)",
+          "installment billing",
+          "lapse warning"
+        ],
+        "integrations": [
+          "carrier policy admin via integrations-core",
+          "payment for premiums",
+          "esign"
+        ],
+        "notifications": [
+          "policy issued, installment due, renewal due, lapse warning to policyholder"
+        ],
+        "audit": "audit-core full policy + premium trail",
+        "failure_modes": [
+          "lapse on missed installment",
+          "renewal missed",
+          "beneficiary error",
+          "coverage gap at renewal"
+        ],
+        "tests": [
+          "bind->active e2e",
+          "installment billing test",
+          "renewal automation test",
+          "lapse-on-nonpay test"
+        ]
+      },
+      "person_centric_reshape": "Policy administration in CRM is broker-book-of-business-centric. Re-center on the policyholder: a clear portal showing exactly what they're covered for, easy installment payment, advance renewal terms with no nasty surprises, and self-serve renewal. The org's policy-term, premium-schedule, beneficiary, carrier-sync, and renewal-revenue machinery is fully preserved as the engine behind a transparent policyholder experience.",
+      "implementation_mode": "local native workflow-core (policy lifecycle) + esign-core + accounting-core (premium installments) + recurrence (renewal scheduling, auto_repeat pattern); carrier sync via integrations-core"
+    },
+    {
+      "id": "crm.endorsement",
+      "domain": "crm-insurance-broker",
+      "name": "Policy Endorsement (Mid-term Change)",
+      "category": "business",
+      "source_systems": [
+        "suitecrm (endorsement patterns)",
+        "frappe (workflow state machine)"
+      ],
+      "source_files": [
+        "suitecrm policy/endorsement module",
+        "frappe workflow.py (state transitions)"
+      ],
+      "local_equivalent": "workflow-core (endorsement state machine) + accounting-core (premium adjustment/proration) + esign-core (endorsement doc) + crm.policy",
+      "local_gaps": [
+        "no endorsement entity (mid-term coverage change)",
+        "no premium proration on endorsement",
+        "no endorsement approval/underwriter referral"
+      ],
+      "suggested_representation": {
+        "trigger": "policyholder requests mid-term change (add coverage, change limits, etc.)",
+        "states": [
+          "requested",
+          "reviewed/referred",
+          "rated (proration)",
+          "approved",
+          "signed",
+          "applied",
+          "declined"
+        ],
+        "actors": [
+          "policyholder (person)",
+          "broker",
+          "underwriter (referral)",
+          "billing"
+        ],
+        "permissions": "policyholder request; broker process; underwriter referral threshold; ABAC tenant",
+        "entities": [
+          "endorsement",
+          "premium adjustment",
+          "amended coverage lines",
+          "esign endorsement doc"
+        ],
+        "apis": [
+          "workflow-core",
+          "accounting proration",
+          "esign",
+          "carrier endorsement connector"
+        ],
+        "ui": [
+          "policyholder self-serve change request",
+          "broker endorsement workbench"
+        ],
+        "jobs": [
+          "proration calculation",
+          "underwriter referral routing",
+          "carrier endorsement sync"
+        ],
+        "integrations": [
+          "carrier endorsement via integrations-core",
+          "payment for additional premium",
+          "esign"
+        ],
+        "notifications": [
+          "endorsement status + premium change to policyholder"
+        ],
+        "audit": "audit-core on change/approval/premium adjustment",
+        "failure_modes": [
+          "proration error",
+          "unapproved endorsement applied",
+          "carrier sync failure",
+          "coverage gap during change"
+        ],
+        "tests": [
+          "proration calc test",
+          "referral-threshold routing test",
+          "endorsement-apply e2e"
+        ]
+      },
+      "person_centric_reshape": "Endorsements are broker-processed policy edits. Re-center on the policyholder: they request a coverage change in plain language, instantly see the premium impact (proration), sign, and it's applied, with the org's underwriter-referral, rating, and carrier-sync requirements preserved as the controls that make the change valid and accurate.",
+      "implementation_mode": "local native workflow-core (endorsement state machine, frappe-workflow pattern) + accounting-core proration + esign-core; carrier endorsement via integrations-core; extends crm.policy"
+    },
+    {
+      "id": "crm.claim_intake",
+      "domain": "crm-insurance-broker",
+      "name": "Insurance Claim Intake & Follow-up",
+      "category": "business",
+      "source_systems": [
+        "suitecrm (claims/claim-followup, cases)",
+        "erpnext SLA escalation",
+        "aware (follow-up escalation analog)"
+      ],
+      "source_files": [
+        "suitecrm claims + case module",
+        "erpnext service_level_agreement.py"
+      ],
+      "local_equivalent": "business-cases-service (scaffold-only) + workflow-core (claim lifecycle) + documents-core (claim docs) + tasks-core (follow-up) + notify",
+      "local_gaps": [
+        "business-cases-service scaffold-only",
+        "no claim entity (FNOL, status, adjuster, settlement)",
+        "no claim follow-up SLA/escalation",
+        "no document-collection for claims"
+      ],
+      "suggested_representation": {
+        "trigger": "policyholder files first notice of loss (FNOL)",
+        "states": [
+          "FNOL-submitted",
+          "acknowledged",
+          "documents-requested",
+          "under-review",
+          "adjuster-assigned",
+          "approved/denied",
+          "settled",
+          "closed"
+        ],
+        "actors": [
+          "claimant (person)",
+          "claims adjuster",
+          "broker",
+          "carrier"
+        ],
+        "permissions": "claimant file/track own; adjuster process; ABAC tenant; consent for shared data",
+        "entities": [
+          "claim (FNOL)",
+          "claim documents",
+          "adjuster assignment",
+          "settlement",
+          "status history"
+        ],
+        "apis": [
+          "business-cases (claim)",
+          "workflow-core lifecycle",
+          "documents-core",
+          "tasks-core follow-up"
+        ],
+        "ui": [
+          "claimant self-serve FNOL + document upload + status tracker",
+          "adjuster claim workbench"
+        ],
+        "jobs": [
+          "follow-up SLA timer (erpnext SLA analog)",
+          "stale-claim escalation",
+          "document-collection nudge",
+          "settlement payment"
+        ],
+        "integrations": [
+          "carrier claims via integrations-core",
+          "payment for settlement",
+          "storage for docs"
+        ],
+        "notifications": [
+          "claim received, docs needed, status updates, settlement to claimant"
+        ],
+        "audit": "audit-core full claim trail",
+        "failure_modes": [
+          "claim stalls (SLA breach)",
+          "missing documents",
+          "wrong adjuster",
+          "disputed denial",
+          "slow settlement"
+        ],
+        "tests": [
+          "FNOL->settlement e2e",
+          "SLA escalation test",
+          "document-collection test"
+        ]
+      },
+      "person_centric_reshape": "Insurance claims in CRM are adjuster/case-management-centric, and claimants are anxious and in the dark. Re-center entirely on the claimant: easy FNOL from their phone, clear list of needed documents, real-time status, and fast settlement. The org's SLA, adjuster routing, document-collection, and carrier integration are preserved as the engine ensuring no claim stalls. This is the highest-empathy reshape: a person in a loss event gets clarity, not a black box.",
+      "implementation_mode": "local native workflow-core (claim lifecycle) + build business-cases-service + documents-core + tasks-core; SLA/follow-up via automation-core (erpnext SLA-escalation pattern); carrier via integrations-core"
+    },
+    {
+      "id": "crm.commission",
+      "domain": "crm-insurance-broker",
+      "name": "Commission Calculation & Approval",
+      "category": "business",
+      "source_systems": [
+        "suitecrm (commissions, commission-splits, multi-level contracts)",
+        "erpnext (commission patterns)"
+      ],
+      "source_files": [
+        "suitecrm broker hierarchy + commission module",
+        "sales-core commission patterns"
+      ],
+      "local_equivalent": "sales-core-service (commissions, partial) + accounting-core (commission payable) + workflow-core (approval) + crm-core (broker hierarchy)",
+      "local_gaps": [
+        "no commission engine (splits, multi-level/override, schedule)",
+        "no commission approval workflow",
+        "no commission->payable->payment chain",
+        "no broker hierarchy roll-up"
+      ],
+      "suggested_representation": {
+        "trigger": "policy bound/premium paid -> commission event; periodic commission run",
+        "states": [
+          "computed",
+          "split-allocated",
+          "reviewed",
+          "approved",
+          "payable-posted",
+          "paid",
+          "disputed"
+        ],
+        "actors": [
+          "broker (person, payee)",
+          "commission manager (approver)",
+          "accounting"
+        ],
+        "permissions": "manager approve; broker view own statement; ABAC tenant; SoD",
+        "entities": [
+          "commission",
+          "commission split",
+          "multi-level/override",
+          "commission statement",
+          "payable entry"
+        ],
+        "apis": [
+          "sales-core commission",
+          "accounting-core payable",
+          "workflow-core approval",
+          "crm-core hierarchy"
+        ],
+        "ui": [
+          "broker self-serve commission statement",
+          "commission manager approval + override dashboard"
+        ],
+        "jobs": [
+          "scheduled commission calculation run",
+          "split/override allocation",
+          "approval routing",
+          "payment batch"
+        ],
+        "integrations": [
+          "accounting payable",
+          "payment",
+          "carrier statements via integrations-core"
+        ],
+        "notifications": [
+          "statement ready, approved, paid to broker"
+        ],
+        "audit": "audit-core full commission + approval trail; SoD",
+        "failure_modes": [
+          "split mis-allocation",
+          "override error",
+          "clawback handling",
+          "payment delay",
+          "dispute"
+        ],
+        "tests": [
+          "split/override calc test",
+          "clawback test",
+          "approval routing test",
+          "statement->payment e2e"
+        ]
+      },
+      "person_centric_reshape": "Commission processing is a finance back-office run. Re-center on the broker as a person who earns a living: a transparent, real-time commission statement they can trust, clear splits/overrides, and predictable payment. The org's multi-level hierarchy, split rules, approval, clawback, and carrier-statement reconciliation are preserved as the accuracy layer behind a statement the broker actually understands.",
+      "implementation_mode": "custom state machine for commission calc (splits/overrides) + local native workflow-core approval + sales-core + accounting-core payable; scheduled run via automation-core; carrier statements via integrations-core"
+    },
+    {
+      "id": "crm.support_case",
+      "domain": "crm-insurance-broker",
+      "name": "Support Case / Service Ticket",
+      "category": "business",
+      "source_systems": [
+        "erpnext (SLA Escalation Workflow)",
+        "suitecrm (cases)",
+        "windmill/activepieces (escalation/approval)"
+      ],
+      "source_files": [
+        "erpnext service_level_agreement.py",
+        "suitecrm case module"
+      ],
+      "local_equivalent": "business-cases-service (scaffold-only) + workflow-core (case lifecycle) + notify (SLA notifications) + tasks-core",
+      "local_gaps": [
+        "business-cases-service scaffold-only",
+        "no SLA tracking (first-response/resolution times)",
+        "no SLA breach escalation",
+        "no case auto-close on SLA"
+      ],
+      "suggested_representation": {
+        "trigger": "customer opens support case (portal/email/webhook)",
+        "states": [
+          "new",
+          "assigned",
+          "in-progress",
+          "waiting-customer",
+          "SLA-warning",
+          "escalated",
+          "resolved",
+          "auto-closed",
+          "reopened"
+        ],
+        "actors": [
+          "customer (person)",
+          "support agent",
+          "support manager (escalation)"
+        ],
+        "permissions": "agent owns assigned; manager escalation; customer track own; ABAC tenant",
+        "entities": [
+          "case/ticket",
+          "SLA policy",
+          "communication thread",
+          "resolution"
+        ],
+        "apis": [
+          "business-cases",
+          "workflow-core",
+          "notify SLA alerts",
+          "tasks-core"
+        ],
+        "ui": [
+          "customer self-serve case portal + status",
+          "agent case queue",
+          "manager SLA dashboard"
+        ],
+        "jobs": [
+          "first-response SLA timer",
+          "resolution SLA timer",
+          "breach escalation",
+          "auto-close on resolution+grace (erpnext SLA pattern)"
+        ],
+        "integrations": [
+          "email/portal/webhook channels via integrations-core",
+          "knowledge base"
+        ],
+        "notifications": [
+          "case received, agent reply, resolution to customer; SLA breach to manager"
+        ],
+        "audit": "audit-core on case lifecycle + SLA events",
+        "failure_modes": [
+          "SLA breach",
+          "case ping-pong",
+          "premature auto-close",
+          "unassigned case"
+        ],
+        "tests": [
+          "SLA first-response timer test",
+          "breach escalation test",
+          "auto-close test"
+        ]
+      },
+      "person_centric_reshape": "Support ticketing is an agent-queue + SLA-metric system. Re-center on the customer in trouble: a clear case portal showing real progress, proactive updates, and fast resolution, with the org's SLA tracking, escalation, and auto-close serving as the guarantee the customer is never forgotten rather than internal-only metrics.",
+      "implementation_mode": "local native workflow-core (case lifecycle) + build business-cases-service + notify; SLA timers + breach escalation via automation-core (erpnext SLA-escalation pattern); channels via integrations-core"
+    },
+    {
+      "id": "crm.document_collection",
+      "domain": "crm-insurance-broker",
+      "name": "Document Collection (KYC / Underwriting)",
+      "category": "business",
+      "source_systems": [
+        "suitecrm (documents, KYC-compliance)",
+        "activepieces/n8n (form trigger)"
+      ],
+      "source_files": [
+        "suitecrm documents + compliance module",
+        "activepieces form-controller.ts",
+        "n8n FormTrigger.node.ts"
+      ],
+      "local_equivalent": "documents-core-service (metadata, versioning, retention) + storage-service (blobs, virus scan) + builder-core (upload form) + workflow-core (collection lifecycle) + business-docs-service (scaffold)",
+      "local_gaps": [
+        "business-docs-service scaffold-only",
+        "no document-collection workflow (request list, track received, validate, complete)",
+        "no required-document checklist per process"
+      ],
+      "suggested_representation": {
+        "trigger": "process requires documents (onboarding/claim/policy/KYC)",
+        "states": [
+          "requested",
+          "partially-received",
+          "under-review",
+          "validated",
+          "complete",
+          "rejected (resubmit)"
+        ],
+        "actors": [
+          "person (uploader)",
+          "reviewer/compliance officer"
+        ],
+        "permissions": "person upload own; reviewer validate; ABAC tenant; PII protection",
+        "entities": [
+          "document request (checklist)",
+          "uploaded document (storage-ref)",
+          "validation status",
+          "retention policy"
+        ],
+        "apis": [
+          "documents-core",
+          "storage-service",
+          "builder-core upload form",
+          "workflow-core"
+        ],
+        "ui": [
+          "person self-serve upload portal (checklist with status)",
+          "reviewer validation queue"
+        ],
+        "jobs": [
+          "missing-document nudge",
+          "virus-scan on upload",
+          "retention/expiry management",
+          "resubmit-request on reject"
+        ],
+        "integrations": [
+          "storage virus-scan",
+          "OCR/extraction (links to AI extraction)",
+          "identity for KYC"
+        ],
+        "notifications": [
+          "documents needed, received, validated, rejected to person"
+        ],
+        "audit": "audit-core on request/upload/validate; retention compliance",
+        "failure_modes": [
+          "missing documents stall process",
+          "invalid/expired document",
+          "virus/malware upload",
+          "retention violation",
+          "resubmit loop"
+        ],
+        "tests": [
+          "checklist completion test",
+          "virus-scan reject test",
+          "resubmit flow test",
+          "retention test"
+        ]
+      },
+      "person_centric_reshape": "Document collection in CRM is a compliance-officer chase via email. Re-center on the person: a single clear checklist showing exactly what's needed and what's received, drag-drop upload from any device, and instant validation feedback. The org's KYC/underwriting completeness, validation, virus-scanning, and retention requirements are preserved as the controls behind a frictionless upload experience.",
+      "implementation_mode": "local native workflow-core (collection lifecycle) + documents-core + storage-service + builder-core form (activepieces/n8n form-trigger pattern); finish business-docs-service; nudges via automation-core"
+    },
+    {
+      "id": "crm.compliance_review",
+      "domain": "crm-insurance-broker",
+      "name": "Compliance Review",
+      "category": "business",
+      "source_systems": [
+        "suitecrm (KYC-compliance, audit-logging)",
+        "frappe (workflow state machine)",
+        "preproc-checklist (audit logging pattern)"
+      ],
+      "source_files": [
+        "suitecrm compliance + audit module",
+        "frappe workflow.py",
+        "preproc-checklist CDataDBConn.cs (FX_AUDIT)"
+      ],
+      "local_equivalent": "workflow-core (review state machine) + audit-core-service (SHA-256 hash-chain, GDPR disclosure) + policy package (scaffold) + tasks-core",
+      "local_gaps": [
+        "policy package scaffold-only (compliance rule engine)",
+        "no compliance-review workflow (flag, review, attest, remediate)",
+        "no periodic compliance audit scheduling"
+      ],
+      "suggested_representation": {
+        "trigger": "compliance event/flag, periodic review schedule, or risk threshold",
+        "states": [
+          "flagged",
+          "under-review",
+          "remediation-required",
+          "remediated",
+          "attested",
+          "closed",
+          "escalated-regulator"
+        ],
+        "actors": [
+          "compliance officer",
+          "reviewer",
+          "management (sign-off)",
+          "DPO"
+        ],
+        "permissions": "compliance roles; segregation of duties; ABAC tenant; tamper-evident",
+        "entities": [
+          "compliance flag/finding",
+          "review record",
+          "remediation task",
+          "attestation",
+          "audit trail"
+        ],
+        "apis": [
+          "workflow-core",
+          "audit-core (immutable trail)",
+          "policy rule eval",
+          "tasks-core remediation"
+        ],
+        "ui": [
+          "compliance officer review dashboard",
+          "management attestation",
+          "audit-trail viewer"
+        ],
+        "jobs": [
+          "periodic compliance scan (scheduled)",
+          "SLA on remediation",
+          "attestation reminder"
+        ],
+        "integrations": [
+          "audit-core hash-chain",
+          "policy rules",
+          "regulatory reporting via integrations-core"
+        ],
+        "notifications": [
+          "flag, remediation-due, attestation-needed to relevant role"
+        ],
+        "audit": "audit-core immutable hash-chain (the core artifact); GDPR Art.15 disclosure",
+        "failure_modes": [
+          "finding not remediated",
+          "attestation overdue",
+          "audit-trail gap",
+          "regulatory deadline missed"
+        ],
+        "tests": [
+          "finding->remediation->attest e2e",
+          "audit hash-chain integrity test",
+          "periodic-scan scheduling test"
+        ]
+      },
+      "person_centric_reshape": "Compliance review is inherently org/regulator-facing, but re-center on the persons it protects: customers and brokers whose data and rights are at stake. Surface to each person their own data-rights status (consent, disclosure requests, GDPR Art.15) via patient/customer portal, while the org's full compliance-review, remediation, attestation, and immutable-audit machinery runs to satisfy regulators. The person experiences trustworthy data stewardship.",
+      "implementation_mode": "local native workflow-core (review state machine, frappe-workflow pattern) + audit-core (immutable trail) + policy package (rule engine, finish from scaffold) + tasks-core; periodic scans via automation-core"
+    },
+    {
+      "id": "auto.human_approval",
+      "domain": "machine-human-automation",
+      "name": "Human Approval Step",
+      "category": "automation",
+      "source_systems": [
+        "windmill (Approval Decision Loop)",
+        "activepieces (Pause/Resume for Human Approval)",
+        "frappe (Workflow allowed_role transitions)",
+        "n8n (Wait Node)",
+        "odoo/erpnext (approver gates)"
+      ],
+      "source_files": [
+        "windmill approvals.rs",
+        "activepieces flow-run.service.ts (pause/resume)",
+        "frappe model/workflow.py",
+        "n8n Wait.node.ts"
+      ],
+      "local_equivalent": "workflow-core-service (BPMN human tasks, real-working) + business-automation-service (approval gate, real-working) + notify-service",
+      "local_gaps": [
+        "approval step in automation-core not surfaced as reusable primitive across all workflows",
+        "no approval-token/resume-link pattern (windmill/activepieces) in automation-core",
+        "no multi-approver / parallel / threshold approval config"
+      ],
+      "suggested_representation": {
+        "trigger": "workflow/automation reaches an approval step",
+        "states": [
+          "pending-approval",
+          "notified",
+          "approved",
+          "rejected",
+          "timed-out/escalated",
+          "resumed"
+        ],
+        "actors": [
+          "approver(s)",
+          "requester",
+          "escalation target"
+        ],
+        "permissions": "approver role per step (allowed_role, frappe pattern); ABAC tenant; SoD",
+        "entities": [
+          "approval task/token",
+          "decision record",
+          "resume context"
+        ],
+        "apis": [
+          "workflow-core human-task",
+          "automation-core approval gate",
+          "notify approval-link"
+        ],
+        "ui": [
+          "approver inbox + one-click approve/reject (with resume link, windmill/activepieces pattern)",
+          "mobile approval"
+        ],
+        "jobs": [
+          "approval-timeout escalation timer",
+          "reminder to approver"
+        ],
+        "integrations": [
+          "notify (Slack/Teams/Email approval, windmill pattern)",
+          "resume webhook"
+        ],
+        "notifications": [
+          "approval request + reminders to approver; outcome to requester"
+        ],
+        "audit": "audit-core on request/decision/timeout; decision attribution",
+        "failure_modes": [
+          "approver unavailable (escalate)",
+          "approval timeout",
+          "wrong approver",
+          "resume-token replay",
+          "stuck-paused flow"
+        ],
+        "tests": [
+          "pause->approve->resume test",
+          "timeout escalation test",
+          "multi-approver/threshold test",
+          "SoD test"
+        ]
+      },
+      "person_centric_reshape": "Approval steps are org-control primitives. Person-centric reshape: make approval frictionless for the approver-as-person (one-tap mobile approve with full context, no hunting), and make the requester-as-person never wait in the dark (live status, ETA). The org's control/SoD/threshold requirements are preserved while both human participants get a respectful experience.",
+      "implementation_mode": "local native workflow-core human-task + automation-core approval gate as a reusable primitive (windmill Approval Decision Loop / activepieces pause-resume pattern); notify for approval links; resume via integrations-core webhook"
+    },
+    {
+      "id": "auto.scheduled_jobs",
+      "domain": "machine-human-automation",
+      "name": "Scheduled Jobs (Cron)",
+      "category": "automation",
+      "source_systems": [
+        "windmill (Scheduled Job Dispatch)",
+        "activepieces (Schedule trigger)",
+        "n8n (Schedule Trigger)",
+        "frappe (AutoRepeat, Reminder, Background Job)",
+        "odoo (ir.cron Scheduled Jobs)",
+        "suitecrm-core (Scheduled Reports)"
+      ],
+      "source_files": [
+        "windmill schedule.rs",
+        "frappe auto_repeat.py, reminder.py, background_jobs.py",
+        "odoo ir_cron*.xml",
+        "n8n Schedule.node.ts"
+      ],
+      "local_equivalent": "automation-core-service (scheduling, real-working) + reports-service (scheduled jobs) + workflow-core (timer events)",
+      "local_gaps": [
+        "no timezone-aware cron with handler chains (windmill schedule pattern: skip-condition + success/failure/recovery handlers)",
+        "no central scheduled-job registry/observability across services",
+        "each service implements own cron ad hoc"
+      ],
+      "suggested_representation": {
+        "trigger": "cron expression (timezone-aware) reached",
+        "states": [
+          "scheduled",
+          "skip-evaluated",
+          "dispatched",
+          "running",
+          "succeeded",
+          "failed->retry",
+          "recovery-handled"
+        ],
+        "actors": [
+          "system",
+          "admin (configures schedule)",
+          "ops (monitors)"
+        ],
+        "permissions": "admin configure; ABAC tenant; ops read-only monitor",
+        "entities": [
+          "schedule (cron + timezone)",
+          "job",
+          "handler chain (success/failure/recovery)",
+          "run record"
+        ],
+        "apis": [
+          "automation-core schedule",
+          "workflow-core timer",
+          "reports scheduled export"
+        ],
+        "ui": [
+          "admin schedule config",
+          "ops scheduled-job monitor (run history, next-run)"
+        ],
+        "jobs": [
+          "the scheduled job itself",
+          "dynamic-skip evaluation (windmill pattern)",
+          "handler-chain dispatch"
+        ],
+        "integrations": [
+          "any downstream service via automation-core actions",
+          "notify on failure"
+        ],
+        "notifications": [
+          "job-failure to ops; digest to admin"
+        ],
+        "audit": "audit-core on schedule changes + run outcomes",
+        "failure_modes": [
+          "missed window (downtime)",
+          "overlapping runs",
+          "timezone/DST drift",
+          "silent failure (no handler)",
+          "thundering herd"
+        ],
+        "tests": [
+          "cron-fire test",
+          "timezone/DST test",
+          "skip-condition test",
+          "failure-handler chain test"
+        ]
+      },
+      "person_centric_reshape": "Scheduled jobs are pure machine automation, but they exist to serve persons: reminders, renewals, recalls, statements. Reshape so every scheduled job is framed by the person-outcome it produces (e.g., 'send the person their appointment reminder' not 'run reminder cron'), and surface to admins which person-facing outcomes each schedule guarantees, so silent failures are caught as person-impact.",
+      "implementation_mode": "local native automation-core (timezone-aware cron + handler chains, windmill schedule.rs pattern) as the single scheduling primitive; workflow-core timer events for in-process timers; reports-service for scheduled exports"
+    },
+    {
+      "id": "auto.webhook_event_sync",
+      "domain": "machine-human-automation",
+      "name": "Webhook / Event-driven Sync",
+      "category": "automation",
+      "source_systems": [
+        "windmill (Event Trigger to Job, Job Queue Lifecycle)",
+        "activepieces (Webhook Inbound, Polling Trigger, Trigger Flow Execution)",
+        "n8n (Webhook Trigger, HTTP Request, Respond to Webhook)",
+        "frappe (Webhook outbound)",
+        "node-red (Message Send/Receive, Flow Deployment)",
+        "bahmni (OpenELIS Atom Feed)"
+      ],
+      "source_files": [
+        "windmill windmill-native-triggers/src/lib.rs, windmill-queue/src/jobs.rs",
+        "activepieces webhook.controller.ts, polling worker",
+        "frappe webhook.py",
+        "node-red runtime/lib/nodes/Node.js"
+      ],
+      "local_equivalent": "integrations-core-service (connector framework, OAuth2/API-key vault, webhooks, retry/backoff, real-working) + event-core-service (Kafka topic/schema registry) + automation-core (event-driven actions)",
+      "local_gaps": [
+        "no inbound-webhook-to-workflow trigger primitive in automation-core (activepieces/n8n pattern)",
+        "no polling-trigger primitive (activepieces polling pattern)",
+        "outbound webhook (frappe pattern) exists in integrations-core but not exposed per-workflow",
+        "no multi-source event trigger (Kafka/Postgres-LISTEN/MQTT, windmill native-triggers pattern)"
+      ],
+      "suggested_representation": {
+        "trigger": "inbound webhook POST / external event (Kafka/Postgres/MQTT) / polling interval",
+        "states": [
+          "event-received",
+          "validated/handshake",
+          "mapped-to-flow",
+          "queued",
+          "executed",
+          "responded",
+          "retried-on-failure"
+        ],
+        "actors": [
+          "external system",
+          "integration admin",
+          "system"
+        ],
+        "permissions": "admin configure connector/webhook; signature verification; ABAC tenant",
+        "entities": [
+          "webhook endpoint",
+          "trigger source",
+          "event payload",
+          "flow run",
+          "connector credential (vault)"
+        ],
+        "apis": [
+          "integrations-core webhook + connector",
+          "event-core publish/subscribe",
+          "automation-core trigger"
+        ],
+        "ui": [
+          "integration admin connector + webhook config",
+          "event/trigger monitor"
+        ],
+        "jobs": [
+          "polling-trigger executor (activepieces pattern)",
+          "webhook re-subscription renewal",
+          "event consumer -> flow dispatch"
+        ],
+        "integrations": [
+          "any external SaaS/system (OAuth2/API-key/HMAC, frappe security pattern)",
+          "Kafka/Redpanda event bus"
+        ],
+        "notifications": [
+          "connector-failure to admin"
+        ],
+        "audit": "audit-core on connector config + event processing; payload reference-only (PHI boundary)",
+        "failure_modes": [
+          "signature/handshake failure",
+          "payload mapping error",
+          "duplicate event (idempotency)",
+          "webhook subscription expiry",
+          "poison message"
+        ],
+        "tests": [
+          "webhook signature-verify test",
+          "idempotent-event test",
+          "polling-trigger test",
+          "retry/DLQ test"
+        ]
+      },
+      "person_centric_reshape": "Event sync is machine plumbing, but its purpose is keeping a person's data consistent everywhere (their record, their order, their policy). Reshape so each integration is documented by the person-data it keeps in sync and respects the PHI/PII boundary (reference-only events, consent-gated), so the person's data flows correctly without ever being over-exposed across systems.",
+      "implementation_mode": "local native integrations-core (connector framework + inbound/outbound webhooks + retry/backoff, frappe/activepieces pattern) + event-core (multi-source triggers, windmill native-triggers pattern) + automation-core event-driven actions; OpenELIS-style feeds as source background service connector"
+    },
+    {
+      "id": "auto.ai_steps",
+      "domain": "machine-human-automation",
+      "name": "AI Summarization / Extraction / Workflow-Generation",
+      "category": "automation",
+      "source_systems": [
+        "activepieces (AI Agent Tool Execution, MCP Tool Execution)",
+        "n8n (AI Transform Node, Chat Hub Session)",
+        "windmill (script steps)"
+      ],
+      "source_files": [
+        "activepieces core/execution/.../agents/mcp.ts",
+        "n8n AiTransform.node.ts, chat-hub.module.ts"
+      ],
+      "local_equivalent": "automation-core (action catalog, can host AI actions) + plugin-runtime-service (WASM/Node sandbox for AI tools) + conversion-core (PDF/FHIR/HL7/CSV extraction, partial)",
+      "local_gaps": [
+        "no AI action/step primitive (LLM summarize/extract/transform) in automation-core",
+        "no AI-agent tool-execution (MCP tooling) in automation-core/plugin-runtime",
+        "no AI-assisted workflow generation",
+        "conversion-core partial (document extraction)",
+        "must honor PHI boundary + agent-eval/observability rule (DeepEval+Langfuse+Presidio)"
+      ],
+      "suggested_representation": {
+        "trigger": "workflow reaches AI step / chat input / document to extract",
+        "states": [
+          "input-prepared",
+          "PII-redacted (Presidio)",
+          "LLM-invoked",
+          "tool-calls-executed",
+          "output-validated",
+          "output-captured",
+          "human-review (if low-confidence)"
+        ],
+        "actors": [
+          "system",
+          "reviewing human (for low-confidence/PHI)",
+          "admin (configures AI step + guardrails)"
+        ],
+        "permissions": "admin configure model/tools; PHI requires consent + redaction; ABAC tenant; eval-gated",
+        "entities": [
+          "AI step config (model/prompt/tools)",
+          "input",
+          "redaction map",
+          "LLM output",
+          "tool-call results",
+          "confidence/eval score"
+        ],
+        "apis": [
+          "automation-core AI action",
+          "plugin-runtime sandbox (tool exec, MCP, activepieces pattern)",
+          "conversion-core extraction"
+        ],
+        "ui": [
+          "admin AI-step builder (builder-studio)",
+          "human-review queue for low-confidence outputs"
+        ],
+        "jobs": [
+          "LLM invocation",
+          "tool-call execution (PIECE/FLOW/MCP/KB, activepieces agent pattern)",
+          "eval/observability capture (Langfuse)",
+          "PII redaction (Presidio)"
+        ],
+        "integrations": [
+          "LLM providers via @curaos/providers (local-first, no SaaS lock-in)",
+          "MCP tooling",
+          "Langfuse v3 + DeepEval (agent-eval rule)"
+        ],
+        "notifications": [
+          "low-confidence -> human review; eval-threshold breach to admin"
+        ],
+        "audit": "audit-core on AI invocations; eval scores logged; redaction enforced; no PHI to external LLM without consent",
+        "failure_modes": [
+          "hallucination",
+          "PHI leak to LLM (must redact)",
+          "tool-call failure",
+          "low-confidence acted on without review",
+          "prompt injection",
+          "cost runaway"
+        ],
+        "tests": [
+          "PII-redaction test (Presidio)",
+          "low-confidence->human-review gate test",
+          "eval-threshold gate test (DeepEval)",
+          "prompt-injection guard test"
+        ]
+      },
+      "person_centric_reshape": "AI steps in n8n/activepieces are generic transforms. Person-centric reshape: use AI to reduce the person's burden (auto-summarize their visit, extract data from their uploaded document, draft their AVS) and the clinician's/agent's burden, always with PHI redaction, consent, human-review for anything clinical or low-confidence, and full eval/observability. AI serves the person's quality-of-life and never the org at the expense of the person's data safety.",
+      "implementation_mode": "local native automation-core AI action + plugin-runtime sandbox (activepieces MCP/agent pattern) + conversion-core extraction; LLM via @curaos/providers (local-first); Presidio redaction + DeepEval/Langfuse per curaos-agent-eval-obs-rule; PHI boundary enforced"
+    },
+    {
+      "id": "auto.retry_error",
+      "domain": "machine-human-automation",
+      "name": "Retry / Error Handling",
+      "category": "automation",
+      "source_systems": [
+        "activepieces (Retry Failed Flow Run)",
+        "n8n (Error Trigger)",
+        "windmill (error handler dispatch, retry)",
+        "node-red (Error Propagation, catch nodes)",
+        "frappe (Background Job retry)"
+      ],
+      "source_files": [
+        "activepieces flow-run.service.ts (retry)",
+        "windmill schedule.rs/jobs.rs (error handler)",
+        "node-red runtime/lib/flows/Flow.js (error propagation)",
+        "frappe background_jobs.py"
+      ],
+      "local_equivalent": "automation-core (run history, conditional branching) + integrations-core (retry/backoff) + event-core (DLQ/outbox) + workflow-core (incidents)",
+      "local_gaps": [
+        "no unified retry policy primitive (backoff, max-attempts, from-failed-step, activepieces pattern)",
+        "no error-handler/catch primitive (node-red catch / n8n Error Trigger pattern)",
+        "no dead-letter + compensation/rollback across automation-core",
+        "no retry-from-failed-step resume"
+      ],
+      "suggested_representation": {
+        "trigger": "step/job/flow error",
+        "states": [
+          "error-raised",
+          "caught",
+          "retry-scheduled (backoff)",
+          "retried",
+          "error-handler-run",
+          "dead-lettered",
+          "compensated/rolled-back",
+          "resolved",
+          "incident-opened"
+        ],
+        "actors": [
+          "system",
+          "ops (manual retry / incident)",
+          "developer"
+        ],
+        "permissions": "ops manual-retry; admin configure retry policy; ABAC tenant",
+        "entities": [
+          "error record",
+          "retry policy (attempts/backoff)",
+          "error handler",
+          "DLQ entry",
+          "compensation action",
+          "incident"
+        ],
+        "apis": [
+          "automation-core retry/branch",
+          "integrations-core backoff",
+          "event-core DLQ",
+          "workflow-core incident"
+        ],
+        "ui": [
+          "ops error/incident dashboard + manual retry",
+          "DLQ inspector"
+        ],
+        "jobs": [
+          "retry with exponential backoff",
+          "error-handler dispatch (windmill pattern)",
+          "DLQ reprocessing",
+          "compensation/rollback (saga)"
+        ],
+        "integrations": [
+          "notify on persistent failure",
+          "event-core outbox/DLQ"
+        ],
+        "notifications": [
+          "persistent-failure/incident to ops"
+        ],
+        "audit": "audit-core on errors/retries/compensations; correlation IDs",
+        "failure_modes": [
+          "infinite retry loop",
+          "poison message",
+          "non-idempotent retry (double-effect)",
+          "unhandled error (silent)",
+          "compensation failure"
+        ],
+        "tests": [
+          "backoff/max-attempts test",
+          "retry-from-failed-step test (activepieces)",
+          "idempotent-retry test",
+          "DLQ + compensation test",
+          "catch-node routing test"
+        ]
+      },
+      "person_centric_reshape": "Error handling is invisible machinery, but its failures hurt persons (a lost reminder, a stuck payment, an unsent claim). Reshape so error policies are tied to person-impact severity: failures affecting a person's care/money/safety escalate fast and surface a clear 'we hit a snag, here's what's happening' to the person rather than a silent dead-letter. Idempotency protects the person from double-effects (double-charge, double-order).",
+      "implementation_mode": "local native automation-core (retry policy + error-handler primitive, activepieces/windmill/node-red pattern) + integrations-core backoff + event-core DLQ + workflow-core incidents; compensation/rollback as saga in workflow-core"
+    },
+    {
+      "id": "auto.escalation",
+      "domain": "machine-human-automation",
+      "name": "Escalation",
+      "category": "automation",
+      "source_systems": [
+        "erpnext (SLA Escalation)",
+        "aware (critical alert escalation ladder)",
+        "windmill/activepieces (timeout escalation)",
+        "frappe (assignment escalation)"
+      ],
+      "source_files": [
+        "erpnext service_level_agreement.py",
+        "aware AwareQIManager (>7-day escalation)",
+        "coms Workflow.php (admin escalation)"
+      ],
+      "local_equivalent": "workflow-core (timer/escalation events) + automation-core (conditional + scheduled) + notify (multi-channel) + tasks-core",
+      "local_gaps": [
+        "no reusable escalation-ladder primitive (L1->L2->supervisor by elapsed time, aware/erpnext pattern)",
+        "no SLA-based escalation across domains",
+        "escalation is hand-rolled per workflow"
+      ],
+      "suggested_representation": {
+        "trigger": "SLA/time threshold breached, no acknowledgement, or condition unmet",
+        "states": [
+          "watching",
+          "warning",
+          "escalated-L1",
+          "escalated-L2",
+          "escalated-supervisor",
+          "resolved",
+          "auto-actioned"
+        ],
+        "actors": [
+          "primary owner",
+          "backup/covering",
+          "supervisor",
+          "system"
+        ],
+        "permissions": "escalation targets per ladder config; ABAC tenant",
+        "entities": [
+          "escalation rule (ladder + timers)",
+          "escalation event",
+          "target chain"
+        ],
+        "apis": [
+          "workflow-core timer/escalation",
+          "automation-core schedule/branch",
+          "notify multi-channel",
+          "tasks-core reassign"
+        ],
+        "ui": [
+          "supervisor escalation dashboard (aware QI pattern)",
+          "escalation-rule config"
+        ],
+        "jobs": [
+          "elapsed-time escalation timer ladder",
+          "no-ack scanner (aware >N-days pattern)",
+          "auto-reassign on escalation"
+        ],
+        "integrations": [
+          "notify (each ladder rung)",
+          "tasks-core reassignment"
+        ],
+        "notifications": [
+          "each escalation rung notifies next target; supervisor on top rung"
+        ],
+        "audit": "audit-core full escalation chain",
+        "failure_modes": [
+          "escalation loop",
+          "no final owner",
+          "escalation fatigue",
+          "timer drift",
+          "escalation suppressed"
+        ],
+        "tests": [
+          "ladder-timer test",
+          "no-ack escalation test",
+          "auto-reassign test",
+          "final-owner guarantee test"
+        ]
+      },
+      "person_centric_reshape": "Escalation exists to ensure a person is served when the primary path fails (a critical result acted on, a claim not stalled, a ticket resolved). Reshape escalation ladders to be measured by person-outcome (the person got helped) not org-process-completion, and inform the affected person that their issue is being actively escalated, never leaving them wondering.",
+      "implementation_mode": "local native workflow-core (escalation-ladder timer primitive, aware/erpnext SLA pattern) + automation-core scheduling + notify + tasks-core reassign; reusable across hc.critical_alert, crm.support_case, erp.expense_approval"
+    },
+    {
+      "id": "auto.audit_review",
+      "domain": "machine-human-automation",
+      "name": "Audit Review",
+      "category": "automation",
+      "source_systems": [
+        "preproc-checklist (Audit Logging FX_AUDIT)",
+        "aware (QI audit/compliance)",
+        "suitecrm (audit-logging)",
+        "frappe (document events)"
+      ],
+      "source_files": [
+        "preproc-checklist CDataDBConn.cs (FX_AUDIT, XML CLOB)",
+        "aware SQLTransporter.cs + QI reports",
+        "suitecrm audit module"
+      ],
+      "local_equivalent": "audit-core-service (SHA-256 hash-chain store, Kafka audit consumer, GDPR Art.15 disclosure, real-working) + reports-service (audit reports) + search-service",
+      "local_gaps": [
+        "no audit-review workflow (anomaly detection, periodic review, access-review attestation)",
+        "no break-glass review process",
+        "no audit-report scheduling/distribution"
+      ],
+      "suggested_representation": {
+        "trigger": "periodic audit-review schedule, anomaly/break-glass event, or compliance request",
+        "states": [
+          "audit-collected",
+          "anomaly-scanned",
+          "under-review",
+          "flagged",
+          "investigated",
+          "attested",
+          "closed"
+        ],
+        "actors": [
+          "auditor/compliance officer",
+          "privacy officer (DPO)",
+          "management (attestation)"
+        ],
+        "permissions": "auditor read-all (immutable); DPO for PHI access review; SoD; ABAC tenant",
+        "entities": [
+          "audit event (hash-chained)",
+          "access record",
+          "break-glass event",
+          "anomaly flag",
+          "attestation"
+        ],
+        "apis": [
+          "audit-core query/disclosure",
+          "reports-service audit report",
+          "search-service over audit"
+        ],
+        "ui": [
+          "auditor review dashboard",
+          "access-review attestation",
+          "break-glass review queue",
+          "audit-trail viewer"
+        ],
+        "jobs": [
+          "periodic access review (scheduled)",
+          "anomaly/unusual-access detection",
+          "break-glass review timer",
+          "audit-report generation (FX_AUDIT/aware pattern)"
+        ],
+        "integrations": [
+          "audit-core hash-chain",
+          "notify for break-glass review",
+          "SIEM export via integrations-core"
+        ],
+        "notifications": [
+          "break-glass event to DPO; anomaly to auditor; attestation-due to management"
+        ],
+        "audit": "the audit trail itself is the artifact; review actions are themselves audited (immutable, tamper-evident)",
+        "failure_modes": [
+          "audit gap / chain break",
+          "unreviewed break-glass",
+          "missed anomaly",
+          "attestation overdue",
+          "over-broad access"
+        ],
+        "tests": [
+          "hash-chain integrity test",
+          "break-glass review-required test",
+          "anomaly detection test",
+          "GDPR Art.15 disclosure test"
+        ]
+      },
+      "person_centric_reshape": "Audit review is org/regulator-facing, but it protects each person's data rights. Reshape to give each person visibility into who accessed their record and why (access-disclosure in patient/customer portal, GDPR Art.15 self-serve), turning the audit trail into a transparency feature for the person while the org's compliance review, break-glass oversight, and anomaly detection run on the same immutable trail.",
+      "implementation_mode": "local native audit-core (immutable hash-chain, the system of record) + reports-service for review reports + search-service; periodic access-review + anomaly scan via automation-core; break-glass review as workflow-core human task"
+    },
+    {
+      "id": "auto.admin_override",
+      "domain": "machine-human-automation",
+      "name": "Admin Override / Break-glass",
+      "category": "automation",
+      "source_systems": [
+        "coms (admin escalation override)",
+        "vista-m (break-glass patterns)",
+        "frappe (privileged role transitions)"
+      ],
+      "source_files": [
+        "coms app/workflow.php (admin escalation)",
+        "corpus break-glass + privilege-escalation patterns"
+      ],
+      "local_equivalent": "identity-service (break-glass logged w/ reason, RBAC reload) + workflow-core (override approval) + audit-core (break-glass record) + healthstack-consent (consent override logging)",
+      "local_gaps": [
+        "no reusable admin-override primitive (force-state, bypass-gate) with mandatory reason + approval + audit",
+        "break-glass exists in identity but not surfaced as a workflow step for clinical/business gates"
+      ],
+      "suggested_representation": {
+        "trigger": "admin/clinician invokes override (force state, bypass approval, emergency access)",
+        "states": [
+          "override-requested",
+          "reason-captured",
+          "approval-required (if not emergency)",
+          "granted",
+          "action-taken",
+          "reviewed-post-hoc",
+          "revoked"
+        ],
+        "actors": [
+          "admin/privileged user",
+          "approver (for non-emergency)",
+          "reviewer (post-hoc)",
+          "DPO (break-glass)"
+        ],
+        "permissions": "privileged role + mandatory reason; emergency break-glass logged immediately; post-hoc review required; ABAC tenant",
+        "entities": [
+          "override request",
+          "reason",
+          "approval (or emergency flag)",
+          "affected entity",
+          "post-hoc review"
+        ],
+        "apis": [
+          "identity break-glass",
+          "workflow-core override step",
+          "audit-core override record",
+          "consent override (healthstack)"
+        ],
+        "ui": [
+          "override dialog (mandatory reason)",
+          "post-hoc review queue (DPO/supervisor)"
+        ],
+        "jobs": [
+          "post-hoc review timer (must review every override)",
+          "override-expiry/revoke",
+          "anomaly on override frequency"
+        ],
+        "integrations": [
+          "audit-core (every override tamper-evident)",
+          "notify DPO on break-glass"
+        ],
+        "notifications": [
+          "break-glass to DPO immediately; post-hoc review-due to supervisor"
+        ],
+        "audit": "audit-core mandatory tamper-evident record with reason + actor + affected entity; the defining requirement",
+        "failure_modes": [
+          "override without reason",
+          "unreviewed break-glass",
+          "override abuse",
+          "privilege creep",
+          "emergency-access not revoked"
+        ],
+        "tests": [
+          "mandatory-reason enforcement test",
+          "emergency break-glass logging test",
+          "post-hoc-review-required test",
+          "override audit-immutability test"
+        ]
+      },
+      "person_centric_reshape": "Admin override/break-glass is pure org-privilege, but it touches a person's protected data at the most sensitive moment (emergency care). Reshape so the person is protected and informed: every break-glass access to their record is logged with reason, surfaced to them via access-disclosure, and post-hoc reviewed. The org's emergency-access capability (life-safety) is fully preserved (no feature loss) but wrapped in mandatory reason + audit + person-disclosure so trust is never sacrificed for power.",
+      "implementation_mode": "local native identity-service break-glass + workflow-core override step (mandatory-reason + optional approval) + audit-core (immutable record) + healthstack-consent override logging; post-hoc review via automation-core scheduled + workflow-core human task"
+    }
+  ],
+  "runtime_strategy": {
+    "summary": "CuraOS already owns the workflow/automation/builder substrate locally; the external engines (Windmill, Activepieces, Node-RED, n8n) are reference patterns to MINE for completeness, NOT to install. None are present in the local inventory. Per the builder+BPM-first charter and generator-first law, every mapped workflow lands as configuration on the local native substrate, with shared primitives extended into the generator/SDK, never per-app hand-edits.",
+    "local_substrate": {
+      "workflow-core-service": "BPMN 2.0 (Zeebe/Camunda), process instances, human tasks, incidents - PRIMARY engine for stateful clinical/business processes (encounter, discharge saga, referral closed-loop, policy/claim lifecycle, escalation ladders).",
+      "automation-core-service": "low-code actions/connectors, scheduling, conditional branching, run history - PRIMARY for cron/scheduled jobs, event-driven actions, retry/error policy, AI steps, reminders/recall/dunning.",
+      "integrations-core-service": "connector framework, OAuth2/API-key vault, webhooks, retry/backoff - PRIMARY for inbound/outbound webhook + event-sync + external SaaS/carrier/payer/PACS/LIS connectors and source background-service feeds (OpenELIS atom-feed pattern).",
+      "event-core-service": "Kafka/Redpanda topic+schema registry, contract versioning, transactional outbox - event-led default for cross-service interaction, DLQ, multi-source triggers.",
+      "builder-core-service + builder-studio": "form/schema builder + logic/validation engine + GrapesJS no-code surfaces + rjsf forms - intake forms, checklists (preproc logic engine), AVS section config, document-collection checklists.",
+      "workflow-designer": "@xyflow/react canvas (node graph) - the visual authoring surface for automation flows.",
+      "plugin-runtime-service": "WASM/Node sandbox - hosts AI agent tool execution + MCP tools (activepieces agent/MCP pattern) safely.",
+      "audit-core-service": "SHA-256 hash-chain + GDPR Art.15 - the immutable system of record for every audit/compliance/break-glass workflow.",
+      "supporting": "recurrence (renewal/billing schedules), policy (compliance rule engine), forms, canvas packages are SCAFFOLD-ONLY and must be finished to back several workflows."
+    },
+    "implementation_mode_distribution": {
+      "local native workflow-core (BPMN)": [
+        "stateful lifecycles: registration, appointment/check-in, encounter, referral closed-loop, discharge saga, contract, policy, endorsement, claim intake, onboarding, customer onboarding, support case, compliance review, human approval, escalation ladders"
+      ],
+      "local native automation-core (cron/event/AI/retry)": [
+        "scheduled jobs, webhook/event sync, AI summarize/extract, retry/error, reminders/recall/dunning, inventory reorder, subscription billing generation, escalation timers"
+      ],
+      "custom state machine (domain calc engines)": [
+        "triage/risk scoring (asrcm pattern), radiology protocol/contraindication (RAPTOR ContraIndEngine), insurance rating/quote, commission split/override calc"
+      ],
+      "source background service pattern (feeds/ETL)": [
+        "LIS/OpenELIS atom-feed ingest, ADT/HL7v2 interop, audit ETL (aware SQL Transporter analog), CDA registry push"
+      ],
+      "reference-only (NOT installed)": [
+        "Windmill schedule/approval/queue patterns, Activepieces pause-resume/agent/MCP/polling patterns, Node-RED message/catch/flow-deploy patterns, n8n trigger/wait/error-trigger patterns - these inform the design of local primitives only"
+      ]
+    },
+    "generator_first_directive": "New workflow capabilities enter via the mold: TypeSpec/AsyncAPI contracts -> @curaos/*-sdk regen -> emitServiceLive scaffold -> emitUiApp FE wiring. Reusable workflow primitives (human-approval step, escalation ladder, retry policy, scheduled-job-with-handler-chain, webhook trigger, AI step) must be added to @curaos/codegen templates/emitters and the workflow/automation SDKs so every service inherits them, NOT hand-coded per service (curaos-generator-evolution-rule).",
+    "data_truth_blockers": [
+      "healthstack-patient FK, healthstack-billing store, healthstack-messaging thread store are IN-MEMORY (pending M9 Drizzle) - workflows depending on them (registration, discharge, claim/billing) are not data-truth-compliant until moved to Postgres seeds/fixtures (curaos-demo-sample-data-rule)."
+    ],
+    "scaffold_gaps_to_finish": [
+      "business-cases-service (claim intake, support case), business-projects-service (project billing), business-scheduling-service (appointment), business-docs-service + business-conversion-service (document collection), healthstack-lab/meds/imaging/careplans/claims/quality/notes/problems/ems/devices/interop/education-service (clinical workflows), recurrence/policy/forms/canvas/plugin-runtime packages."
+    ],
+    "person_centric_dominant_pattern": "Per the LENS, every workflow yields DUAL surfaces on shared data+contract: a person-facing journey surface (patient-app / customer portal / broker self-serve: simple, journey-driven) AND a management surface (clinician/admin/business: full compliance + control). The org process is satisfied as a consequence of serving the person well; no source business/management/compliance feature is dropped, only re-sequenced, defaulted, and automated."
+  }
+}

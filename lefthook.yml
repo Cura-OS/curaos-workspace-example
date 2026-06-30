@@ -1,0 +1,28 @@
+# Root workspace hooks for docs/rule graph commits.
+# Stubs live in tracked .githooks/ (fail-closed; `just hooks` sets core.hooksPath).
+pre-commit:
+  parallel: true
+  commands:
+    doc-graph:
+      glob: "**/*.md"
+      run: bash scripts/check-docs.sh
+    ai-mirror:
+      # No glob (RP-08): a bare curaos pointer bump stages no path the old
+      # glob matched, silently skipping the mirror check. Script runs <1s.
+      run: bash scripts/check-ai-mirror.sh
+    no-dashes:
+      # Em/en dash gate over staged ADDED lines only (RP-09).
+      run: bash scripts/check-no-dashes.sh
+    gitleaks:
+      # `protect` is deprecated in gitleaks 8.x; keep the workspace hook aligned
+      # with the curaos repo hook and root package script.
+      run: gitleaks git --staged --redact
+
+commit-msg:
+  commands:
+    conventional-msg:
+      # Conventional Commits subject + AI-attribution trailer ban (RP-10).
+      run: bash scripts/check-commit-msg.sh {1}
+
+# pre-push gate lives in .githooks/pre-push (runs `just ci` directly; lefthook's
+# pre-push files-filter skips commands on empty ref input, which is fail-open).

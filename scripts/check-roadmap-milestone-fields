@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Verify every item on the `CuraOS Roadmap` Project (#2) carries a non-empty
+# `CuraOS Milestone` single-select value. This is roadmap hygiene for
+# curaos-ai-workspace#321 (Phase 2), not a dispatch gate.
+#
+# WHY a `scripts/` standalone, NOT a `scripts/workflows/*.workflow.js`:
+# the Workflow runtime has NO shell/fs (see the comment in
+# scripts/workflows/milestone-wave.workflow.js ~L99-101). A deterministic
+# board scan that should `exit non-zero` for hygiene therefore CANNOT live as a workflow
+# executor. It would have to be a non-deterministic `agent()` call that
+# cannot reliably report. So this check joins the `sweep-*` converger family
+# (sweep-foresight-staging / sweep-closed-issue-labels / sweep-project-status)
+# that the orchestrator can run as §11 hygiene checks. milestone-wave's
+# Scan phase reports unset milestone metadata directly. #321 explicitly
+# permits this "inline pre-flight rather than a standalone workflow" escape.
+#
+# The invariant this enforces: the grouping key is the custom single-select
+# `CuraOS Milestone` field (M1..M17), NOT GitHub's built-in `Milestone`
+# field (0 options, a write to it is silently dropped). An item whose
+# `CuraOS Milestone` is unset falls into the "No Milestone" bucket in roadmap
+# views. Dispatch scans every open issue and does not gate on this metadata.
+#
+# This catches items added by a path that bypasses the triage gate (the
+# auto-add workflow, a manual `gh project item-add`, a raw `gh issue create`).
+#
+# Scope: ONLY the `CuraOS Milestone` field. Other field gaps (Status, Priority,
+# Cycle, Initiative) + the seed-vs-live option drift are tracked separately.
+#
+# Usage:
+#   check-roadmap-milestone-fields [--json]
+#
+# Exit: 0 when every Project #2 item has a non-empty CuraOS Milestone value;
+#       3 when ANY item is unset (hygiene gap); 2 on a resolution/auth error.
+set -uo pipefail
+
+JSON=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json) JSON=1 ;;
+    -h|--help) sed -n '2,46p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# The session GITHUB_TOKEN shadows the keyring token's read:project scope and
+# silently downgrades ProjectV2 reads. Bypass it per-call.
+gh() { env -u GITHUB_TOKEN command gh "$@"; }
+
+OWNER="your-org"
+PROJECT_TITLE="CuraOS Roadmap"
+
+# Resolve project number dynamically (title stable; number varies per org).
+PROJ_NUM=$(gh project list --owner "$OWNER" --format json 2>/dev/null \
+  | jq -r --arg t "$PROJECT_TITLE" '.projects[] | select(.title==$t) | .number')
+if [ -z "$PROJ_NUM" ]; then
+  echo "could not resolve project '$PROJECT_TITLE' for owner $OWNER" >&2
+  exit 2
+fi
+
+# Enumerate ALL items, paginated (the board has >100 items — a single page
+# silently truncates). `gh project item-list` flattens the custom single-select
+# to the key `curaOS Milestone` (with a space — verified against the live board,
+# same key sweep-foresight-staging uses); an unset field is absent/empty.
+items_json=$(gh project item-list "$PROJ_NUM" --owner "$OWNER" --format json --limit 500 2>/dev/null)
+if [ -z "$items_json" ]; then
+  echo "could not list items for project #$PROJ_NUM" >&2
+  exit 2
+fi
+
+# An item is UNSET iff its `curaOS Milestone` key is missing or empty string.
+unset_lines=$(printf '%s' "$items_json" | jq -r '
+  .items[]
+  | select(((.["curaOS Milestone"] // "") | tostring) == "")
+  | "\(.content.repository // "draft")#\(.content.number // .id)\t\(.content.title // .title // "(untitled)")"
+')
+total=$(printf '%s' "$items_json" | jq -r '.items | length')
+unset_count=$(printf '%s' "$unset_lines" | grep -c . || true)
+
+if [ "$JSON" -eq 1 ]; then
+  printf '%s' "$items_json" | jq -c --arg total "$total" '{
+    total: ($total | tonumber),
+    unset: [ .items[] | select(((.["curaOS Milestone"] // "") | tostring) == "")
+             | { ref: ("\(.content.repository // "draft")#\(.content.number // .id)"),
+                 title: (.content.title // .title // "(untitled)") } ]
+  } | .unset_count = (.unset | length)'
+  [ "$unset_count" -gt 0 ] && exit 3 || exit 0
+fi
+
+if [ "$unset_count" -gt 0 ]; then
+  echo "FAIL: $unset_count of $total Project #$PROJ_NUM item(s) have an UNSET CuraOS Milestone field:"
+  printf '%s\n' "$unset_lines" | while IFS=$'\t' read -r ref title; do
+    [ -z "$ref" ] && continue
+    echo "  - $ref  $title"
+  done
+  echo "Set each via: env -u GITHUB_TOKEN gh project item-edit --id <itemId> --project-id <projId> --field-id <CuraOS-Milestone-field-id> --single-select-option-id <optionId>"
+  echo "(field/option IDs cached in curaos-gh-project-sync-env-workaround memory)"
+  exit 3
+fi
+
+echo "OK: all $total Project #$PROJ_NUM item(s) carry a CuraOS Milestone value."
+exit 0

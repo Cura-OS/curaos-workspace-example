@@ -1,0 +1,16 @@
+#!/bin/sh
+# Fail-closed merge gate (RP-01): full `just ci` before anything leaves the machine
+# (local-CI-first rule). Runs the gate directly (not via lefthook: its pre-push
+# files-filter skips commands on synthetic/empty ref input, which is fail-open).
+# Escape hatch: LEFTHOOK=0 skips (lefthook convention), emergencies only.
+[ "$LEFTHOOK" = "0" ] && exit 0
+if ! command -v just >/dev/null 2>&1; then
+  echo "pre-push: just not found (brew install just); failing closed" >&2
+  exit 1
+fi
+# Hooks inherit GIT_DIR (the worktree-specific gitdir on linked worktrees).
+# Gate commands run nested git in submodules and temp repos; the inherited
+# env overrides repo discovery there and fails them closed. Sanitize so the
+# gate sees the same environment as a developer shell.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
+exec just ci

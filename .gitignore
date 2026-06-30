@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build / cache
+.cache/
+.codegraph/
+.serena/
+*.tsbuildinfo
+
+# Local agent / orchestration scratch
+.scratch/
+.scratch-*/
+.worktrees/
+.wt-*/
+.ai-analysis/
+external-sources/
+
+# OS
+.DS_Store
+
+# Local issue tracker DB (regenerate locally)
+*.sqlite

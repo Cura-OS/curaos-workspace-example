@@ -1,0 +1,85 @@
+<!-- @dsCard group="Brand Directions" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CuraOS Brand B — Platform Indigo</title>
+<style>
+  :root{
+    --bg:#f7f8fb; --surface:#ffffff; --ink:#13162a; --ink-2:#4a4f6b; --line:#e2e4ee;
+    --brand:#4f46e5; --brand-600:#4338ca; --brand-700:#3730a3; --brand-50:#eef0fe;
+    --accent:#06b6d4; --ok:#16a34a; --warn:#d97706; --err:#dc2626; --info:#2563eb;
+    --radius:12px; --shadow:0 1px 2px rgba(19,22,42,.06),0 8px 24px rgba(19,22,42,.08);
+    --font:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:28px}
+  h1{font-size:26px;letter-spacing:-.02em;margin:0 0 2px} .sub{color:var(--ink-2);margin:0 0 22px;font-size:14px}
+  .ramps{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:24px}
+  .sw{border-radius:10px;height:64px;display:flex;align-items:flex-end;padding:8px;color:#fff;font-size:11px;font-weight:600;box-shadow:var(--shadow)}
+  .label{font-size:12px;color:var(--ink-2);margin:18px 0 8px;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+  .type span{display:block;color:var(--ink)} .t1{font-size:30px;font-weight:700;letter-spacing:-.02em} .t2{font-size:20px;font-weight:600}
+  .t3{font-size:15px} .t4{font-size:13px;color:var(--ink-2)}
+  .app{display:grid;grid-template-columns:210px 1fr;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow);margin-top:8px}
+  .nav{background:linear-gradient(180deg,#1e1b4b,var(--brand-700));color:#dcd9fb;padding:18px 14px}
+  .logo{display:flex;align-items:center;gap:8px;font-weight:700;color:#fff;margin-bottom:18px}
+  .logo .dot{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--brand),var(--accent))}
+  .nav a{display:block;padding:8px 10px;border-radius:8px;color:#c7c3f5;text-decoration:none;font-size:13px;margin-bottom:2px}
+  .nav a.on{background:rgba(255,255,255,.14);color:#fff;font-weight:600}
+  .main{padding:20px 22px;background:var(--bg)}
+  .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px} .top h2{font-size:17px;margin:0}
+  .btn{border:0;border-radius:9px;padding:9px 14px;font-weight:600;font-size:13px;cursor:pointer}
+  .btn.p{background:var(--brand);color:#fff} .btn.s{background:var(--brand-50);color:var(--brand-700);margin-left:8px}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+  .kpi .n{font-size:24px;font-weight:700} .kpi .l{font-size:12px;color:var(--ink-2)} .kpi .d{font-size:12px;color:var(--ok);font-weight:600}
+  .tbl{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  .row{display:grid;grid-template-columns:1fr 110px 90px;padding:11px 14px;border-top:1px solid var(--line);font-size:13px;align-items:center}
+  .row.h{border-top:0;color:var(--ink-2);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;background:#fafbff}
+  .pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-block}
+  .pill.ok{background:#e8f6ed;color:var(--ok)} .pill.w{background:#fdf2e3;color:var(--warn)}
+</style></head><body><div class="wrap">
+  <h1>Brand B — Platform Indigo</h1>
+  <p class="sub">Modern, technical, confident. Indigo primary + cyan accent. Reads as a serious developer/ops platform.</p>
+  <div class="label">Primary ramp</div>
+  <div class="ramps">
+    <div class="sw" style="background:#eef0fe;color:#3730a3">50</div>
+    <div class="sw" style="background:#4f46e5">500 brand</div>
+    <div class="sw" style="background:#4338ca">600</div>
+    <div class="sw" style="background:#3730a3">700</div>
+    <div class="sw" style="background:#06b6d4;color:#04323a">accent</div>
+  </div>
+  <div class="label">Semantic</div>
+  <div class="ramps">
+    <div class="sw" style="background:#16a34a">success</div>
+    <div class="sw" style="background:#d97706">warning</div>
+    <div class="sw" style="background:#dc2626">error</div>
+    <div class="sw" style="background:#2563eb">info</div>
+    <div class="sw" style="background:#13162a">ink</div>
+  </div>
+  <div class="label">Type scale (Inter)</div>
+  <div class="type">
+    <span class="t1">Patient encounters today</span>
+    <span class="t2">Composable care, self-hosted</span>
+    <span class="t3">Body — manage tenants, workflows, and clinical records.</span>
+    <span class="t4">Caption / metadata — last synced 2 min ago</span>
+  </div>
+  <div class="label">In context — admin console</div>
+  <div class="app">
+    <div class="nav">
+      <div class="logo"><span class="dot"></span>CuraOS</div>
+      <a class="on">Dashboard</a><a>Tenants</a><a>Users</a><a>Workflows</a><a>Audit</a><a>Settings</a>
+    </div>
+    <div class="main">
+      <div class="top"><h2>Tenant overview</h2><div><button class="btn p">New tenant</button><button class="btn s">Export</button></div></div>
+      <div class="cards">
+        <div class="kpi"><div class="n">128</div><div class="l">Active tenants</div><div class="d">+6 this week</div></div>
+        <div class="kpi"><div class="n">14.2k</div><div class="l">Users</div><div class="d">+312</div></div>
+        <div class="kpi"><div class="n">99.97%</div><div class="l">Uptime</div><div class="d">SLA met</div></div>
+      </div>
+      <div class="tbl">
+        <div class="row h"><div>Tenant</div><div>Plan</div><div>Status</div></div>
+        <div class="row"><div>Northwind Clinic</div><div>On-prem</div><div><span class="pill ok">Active</span></div></div>
+        <div class="row"><div>Acme Health</div><div>Cloud</div><div><span class="pill ok">Active</span></div></div>
+        <div class="row"><div>Riverside EDU</div><div>Hybrid</div><div><span class="pill w">Pending</span></div></div>
+      </div>
+    </div>
+  </div>
+</div></body></html>

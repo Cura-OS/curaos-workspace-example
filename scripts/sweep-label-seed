@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# Seed the canonical label set into every org repo, idempotently.
+#
+# This is the DURABLE answer to the recurring "new repo ships with GitHub-default
+# labels only" drift: `gh issue edit <n> --add-label <label>` fails SILENTLY
+# (exit 0, no label applied) when the label does not exist in that repo, so an
+# un-seeded repo lets triage look like it ran while the label never lands.
+# Known offenders: newly scaffolded service repos (curaos-deploy, curaos-website,
+# patient-core-service, org-core-service were all missing `blocked`).
+#
+# Canonical set = 9 labels (single registry source: docs/agents/triage-labels.md):
+#   5 state:    needs-triage | needs-info | ready-for-agent | ready-for-human | wontfix
+#   2 category: bug | enhancement
+#   2 marker:   foresight | blocked   (orthogonal; pair with a state label)
+#
+# The sweep enumerates every non-archived org repo, diffs its labels against the
+# canonical set, and reports/creates exactly the missing ones. It is additive-only:
+# it never deletes, recolors, or edits an existing label.
+#
+# Default mode is DRY-RUN (lists would-SEED, mutates nothing).
+# Pass --apply to actually create the missing labels.
+#
+# Usage:
+#   sweep-label-seed [--dry-run] [--apply] [--repo OWNER/REPO]
+#     --dry-run is the default mode (accepted explicitly for caller clarity).
+#     --repo limits the sweep to one repo (default: whole org).
+#
+# Exit: 0 when clean or after a successful --apply; 3 when a dry-run finds a
+# repo missing any canonical label (so it can gate the milestone-orchestration
+# §11 wave-done stop-predicate); 70 on a GitHub read failure; 1 on apply failure.
+set -uo pipefail
+
+APPLY=0
+ONE_REPO=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply) APPLY=1 ;;
+    --dry-run) APPLY=0 ;;
+    --repo) ONE_REPO="$2"; shift ;;
+    -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# Agent shells can carry a narrow GITHUB_TOKEN that lacks org scope.
+# Unset it so gh uses GH_TOKEN or the project-scoped keyring login.
+gh() { env -u GITHUB_TOKEN command gh "$@"; }
+
+OWNER="your-org"
+
+# name|color|description (gh rejects descriptions >100 chars).
+CANONICAL=(
+  "needs-triage|FBCA04|Maintainer evaluates"
+  "needs-info|D93F0B|Waiting on reporter"
+  "ready-for-agent|0E8A16|Fully specified, AFK agent ready"
+  "ready-for-human|1D76DB|Human implementation required"
+  "wontfix|B60205|Will not action"
+  "bug|d73a4a|Something is broken"
+  "enhancement|a2eeef|New feature or improvement"
+  "foresight|C5DEF5|Proactively-captured future work; quarantined in Backlog until its milestone is active"
+  "blocked|E99695|Orthogonal marker: unmet real/external prerequisite; pairs with a state label"
+)
+
+repo_label_names() {
+  local repo="$1" raw
+  if ! raw=$(gh api -X GET "repos/$repo/labels" --paginate --slurp -f per_page=100 2>&1); then
+    echo "sweep-label-seed: gh labels REST read failed for $repo: $raw" >&2
+    return 70
+  fi
+  printf '%s' "$raw" | jq -r '.[][].name'
+}
+
+org_repos() {
+  local raw
+  if ! raw=$(gh api -X GET "orgs/$OWNER/repos" --paginate --slurp -f per_page=100 2>&1); then
+    echo "sweep-label-seed: gh repos REST read failed: $raw" >&2
+    return 70
+  fi
+  printf '%s' "$raw" | jq -r '.[][] | select(.archived != true) | .full_name'
+}
+
+# Output lines: <owner/repo>\t<canonical label name>, one per missing label.
+gather() {
+  local repo names entry name repos
+  if [ -n "$ONE_REPO" ]; then
+    repos="$ONE_REPO"
+  else
+    repos="$(org_repos)" || return 70
+  fi
+  while IFS= read -r repo; do
+    [ -z "$repo" ] && continue
+    names="$(repo_label_names "$repo")" || return 70
+    for entry in "${CANONICAL[@]}"; do
+      name="${entry%%|*}"
+      if ! printf '%s\n' "$names" | grep -Fxq "$name"; then
+        printf '%s\t%s\n' "$repo" "$name"
+      fi
+    done
+  done <<< "$repos"
+}
+
+color_of() { local e; for e in "${CANONICAL[@]}"; do [ "${e%%|*}" = "$1" ] && { e="${e#*|}"; printf '%s' "${e%%|*}"; return; }; done; }
+desc_of()  { local e; for e in "${CANONICAL[@]}"; do [ "${e%%|*}" = "$1" ] && printf '%s' "${e##*|}"; done; }
+
+if ! gathered="$(gather)"; then
+  exit 70
+fi
+
+missing=0
+seeded=0
+failed=0
+while IFS=$'\t' read -r repo name; do
+  [ -z "$repo" ] && continue
+  missing=$((missing+1))
+  if [ "$APPLY" -eq 1 ]; then
+    if gh label create "$name" --repo "$repo" \
+        --color "$(color_of "$name")" --description "$(desc_of "$name")" >/dev/null 2>&1; then
+      echo "  SEED   $repo - $name"
+      seeded=$((seeded+1))
+    else
+      echo "  FAIL   $repo - could not create: $name" >&2
+      failed=$((failed+1))
+    fi
+  else
+    echo "  would-SEED  $repo - $name"
+  fi
+done <<< "$gathered"
+
+if [ "$APPLY" -eq 1 ]; then
+  if [ "$failed" -gt 0 ]; then
+    echo "seeded: $seeded label(s) created, $failed failed" >&2
+    exit 1
+  fi
+  echo "seeded: $seeded label(s) created"
+  exit 0
+else
+  echo "dry-run: $missing canonical label(s) missing across org repos"
+  [ "$missing" -gt 0 ] && exit 3 || exit 0
+fi

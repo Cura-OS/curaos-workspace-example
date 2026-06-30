@@ -1,0 +1,10 @@
+# Shared: PR Merge + Closure Invariants
+
+Canonical PR-closure invariants for [prompts](../milestone-orchestration-prompt.md). Executors `pr-verify-merge.workflow.js` and merge legs in `milestone-wave.workflow.js` enforce these gates:
+
+- **PR head snapshot gate:** merge decisions bind to the current REST `/pulls/N` `head.sha`. Empty, malformed, or changed SHA evidence blocks merge.
+- **Review-thread resolution gate:** a PR or issue is `safe-to-merge-clean` only when every reviewer thread is resolved and no thread is escalated or tagged `needs-human`. "merged" alone is insufficient. A live finding gets captured into a follow-up issue first, then its thread is resolved; see [notification-hygiene](notification-hygiene.md).
+- **Branch deletion verification:** `gh pr merge --delete-branch` is not proof. After merge, verify `git ls-remote --exit-code --heads origin <branch>` returns no match. If a branch survives, delete the exact remote ref via REST and re-verify.
+- **Close-path label hygiene:** auto-closed issues must lose every workflow-state label (`ready-for-agent`, `needs-triage`, `needs-info`, `ready-for-human`, `agent-PR-open`, `agent-claimed:*`). A closed issue carries zero state labels; only category (`bug` or `enhancement`) and marker (`foresight` or `blocked`) labels persist. For out-of-band merges, converge with `bash scripts/sweep-closed-issue-labels --apply`.
+- **Close-path board-status hygiene:** auto-closing an issue does not advance its `CuraOS Roadmap` Status. Merge legs flip closed or completed Project items stuck at `Ready`, `In Progress`, or `In Review` to `Done`. Converge with `bash scripts/sweep-project-status --apply`.
+- **Workspace readiness:** never end on a merged or deleted branch. Fetch and prune, switch to repository default branch (`main` unless repo config says otherwise), fast-forward, sync submodules when applicable, and verify `git status --short --branch` is clean. Preserve residue with a named stash or land it through a separate PR; never discard silently; never report done from a gone upstream branch. Report `WORKSPACE_READY: <clean|stashed:<stash-ref>|blocked:<reason>|n/a>`.

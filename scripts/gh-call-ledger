@@ -1,0 +1,331 @@
+#!/usr/bin/env bun
+// scripts/gh-call-ledger (RP-36, per Codex grill GRILL-011)
+// Reproducible source of truth for GitHub-call counts: every Wave 3 savings claim is verified
+// against a ledger emitted by THIS tool, never against prose estimates.
+//
+// Modes:
+//   gh-call-ledger wrap [--out ledger.json] -- <cmd> [args...]
+//       Runs <cmd> with a recording `gh` shim first on PATH (every gh invocation is appended to
+//       a raw jsonl, then delegated to the REAL gh). Emits the per-endpoint count ledger.
+//   gh-call-ledger scenario issue-read-100 --mode per-issue|batched [--out file] [--compare baseline.json]
+//       Reproducible 100-issue read scenario against a deterministic STUB gh (zero network):
+//         per-issue = the PRE-BATCHING pipeline shape (the committed baseline): per issue one
+//                     `gh issue view --json body,labels,state` (deterministicIssueMetadata,
+//                     scripts/workflows/gh-issue-triage.workflow.js) + one native parent probe
+//                     `gh api repos/:owner/:repo/issues/:n/parent` (nativeParentRef, same file)
+//                     + one mandated agent re-read `gh issue view --comments` (triage prompt
+//                     step 1). 3 reads/issue = 300 calls for the 100-issue read.
+//         batched   = the REAL post-change read layer: ghProject.batchIssueRead() over the same
+//                     issue set (schema probe + ONE aliased document; <=2 GraphQL calls).
+//       --compare verifies the scenario matches the committed baseline artifact and prints the
+//       delta (exit 3 on scenario mismatch).
+//   gh-call-ledger parse <raw.jsonl> [--out file]
+//       Classifies an existing raw args jsonl (one JSON array per line) into the count ledger.
+//
+// Ledger shape:
+//   { tool, mode, scenario?, generatedAt, counts: { "<endpoint>": n, ... },
+//     totals: { all, graphql, rest, cli } }
+// Endpoint normalization: numeric path segments -> :n; repos/<owner>/<repo>/ -> repos/:owner/:repo/;
+// `gh api graphql` -> "graphql"; other `gh api PATH` -> "api PATH"; CLI commands keyed by their
+// first two words + the --json/--comments read shape.
+//
+// The committed baseline artifact lives at scripts/gh-call-ledger-baseline.json (first run of
+// the per-issue scenario). Re-derive any time with:
+//   scripts/gh-call-ledger scenario issue-read-100 --mode per-issue
+
+const { execFileSync, spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+const ROOT = path.resolve(__dirname, "..");
+const BASELINE_PATH = path.join(ROOT, "scripts", "gh-call-ledger-baseline.json");
+
+// ---- endpoint classification ----
+function normalizeApiPath(p) {
+  let out = String(p);
+  out = out.replace(/^repos\/[^/]+\/[^/]+/, "repos/:owner/:repo");
+  out = out.replace(/\/\d+(?=\/|$)/g, "/:n");
+  return out;
+}
+
+function classify(args) {
+  const a = Array.isArray(args) ? args.map(String) : [];
+  if (a[0] === "api") {
+    const rest = a.slice(1).filter((t) => t !== "--paginate" && t !== "--include" && t !== "-i");
+    // skip flag/value pairs (-X POST, -F k=v, -H h, -f q=...) to find the path/graphql token
+    const skipNext = new Set(["-X", "-F", "-H", "-f", "--cache"]);
+    let pathToken = "";
+    for (let i = 0; i < rest.length; i++) {
+      if (skipNext.has(rest[i])) {
+        i += 1;
+        continue;
+      }
+      if (rest[i].startsWith("-")) continue;
+      pathToken = rest[i];
+      break;
+    }
+    if (pathToken === "graphql") return { endpoint: "graphql", kind: "graphql" };
+    return { endpoint: `api ${normalizeApiPath(pathToken)}`, kind: "rest" };
+  }
+  const words = a.filter((t) => !t.startsWith("-")).slice(0, 2);
+  const shape = a.includes("--comments") ? " --comments" : a.includes("--json") ? " --json" : "";
+  return { endpoint: `${words.join(" ")}${shape}`.trim() || "(unknown)", kind: "cli" };
+}
+
+function buildLedger(rawArgsList, { mode, scenario } = {}) {
+  const counts = {};
+  const totals = { all: 0, graphql: 0, rest: 0, cli: 0 };
+  for (const args of rawArgsList) {
+    const { endpoint, kind } = classify(args);
+    counts[endpoint] = (counts[endpoint] || 0) + 1;
+    totals.all += 1;
+    totals[kind] += 1;
+  }
+  const sorted = {};
+  for (const key of Object.keys(counts).sort()) sorted[key] = counts[key];
+  const ledger = { tool: "gh-call-ledger", mode: mode || "wrap", generatedAt: new Date().toISOString(), counts: sorted, totals };
+  if (scenario) ledger.scenario = scenario;
+  return ledger;
+}
+
+function readRawLedger(file) {
+  if (!fs.existsSync(file)) return [];
+  return fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+// ---- scenario: issue-read-100 ----
+// 100 issues spread over 10 repos in one org; wave phase set = the triage read leg. The SAME
+// issue set drives both modes, so the two ledgers are directly comparable (GRILL-011).
+function scenarioSpec() {
+  const org = "scenario-org";
+  const issues = Array.from({ length: 100 }, (_, i) => ({ repo: `${org}/repo-${i % 10}`, number: i + 1 }));
+  return {
+    issues,
+    record: { name: "issue-read-100", issueCount: 100, repoCount: 10, org, wavePhases: ["triage-read"] },
+  };
+}
+
+// Deterministic stub gh: records every invocation, answers the read shapes both pipeline modes
+// use, never touches the network.
+const STUB_GH = `#!/usr/bin/env bun
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.GH_CALL_LEDGER_RAW, JSON.stringify(args) + "\\n");
+const write = (v) => process.stdout.write(typeof v === "string" ? v : JSON.stringify(v));
+if (args[0] === "api" && args[1] === "graphql") {
+  const query = (args.find((a) => a.startsWith("query=")) || "").slice("query=".length);
+  if (query.includes("__type")) {
+    write({ data: { __type: { fields: [{ name: "id" }, { name: "parent" }, { name: "subIssues" }] } } });
+    process.exit(0);
+  }
+  const data = {};
+  for (const m of query.matchAll(/(i\\d+): repository\\(owner:"([^"]+)",name:"([^"]+)"\\)\\{issue\\(number:(\\d+)\\)/g)) {
+    const n = Number(m[4]);
+    data[m[1]] = { issue: {
+      id: "NID-" + n, databaseId: 1000 + n, number: n, state: "OPEN", title: "T" + n,
+      body: "---\\nmilestone: M17\\n---\\nbody-" + n,
+      labels: { nodes: [{ name: "needs-triage" }] },
+      parent: null, subIssues: { nodes: [] },
+    } };
+  }
+  write({ data });
+  process.exit(0);
+}
+if (args[0] === "api" && /\\/parent$/.test(args[1] || "")) {
+  write('{"message":"No parent issue found","status":"404"}');
+  process.stderr.write("gh: No parent issue found (HTTP 404)\\n");
+  process.exit(1);
+}
+if (args[0] === "issue" && args[1] === "view" && args.includes("--json")) {
+  write({ body: "---\\nmilestone: M17\\n---\\nbody", labels: [{ name: "needs-triage" }], state: "OPEN" });
+  process.exit(0);
+}
+if (args[0] === "issue" && args[1] === "view" && args.includes("--comments")) {
+  write("title\\n--\\nbody\\n--\\n(no comments)\\n");
+  process.exit(0);
+}
+process.stderr.write("gh-call-ledger stub: unhandled args " + JSON.stringify(args) + "\\n");
+process.exit(64);
+`;
+
+function withStubGh(fn) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gh-call-ledger-"));
+  const binDir = path.join(tmp, "bin");
+  fs.mkdirSync(binDir, { recursive: true });
+  const rawPath = path.join(tmp, "raw.jsonl");
+  fs.writeFileSync(path.join(binDir, "gh"), STUB_GH, { mode: 0o755 });
+  const saved = { PATH: process.env.PATH, GH_CALL_LEDGER_RAW: process.env.GH_CALL_LEDGER_RAW };
+  process.env.PATH = `${binDir}${path.delimiter}${saved.PATH}`;
+  process.env.GH_CALL_LEDGER_RAW = rawPath;
+  try {
+    fn();
+    return readRawLedger(rawPath);
+  } finally {
+    process.env.PATH = saved.PATH;
+    if (saved.GH_CALL_LEDGER_RAW === undefined) delete process.env.GH_CALL_LEDGER_RAW;
+    else process.env.GH_CALL_LEDGER_RAW = saved.GH_CALL_LEDGER_RAW;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+function ghStubCall(args) {
+  // env passed EXPLICITLY: under bun, execFileSync resolves the binary against the ORIGINAL
+  // process PATH unless an env option is given, so a bare call here would silently hit the REAL
+  // gh (live-caught 2026-06-10: the stub was bypassed and 300 real reads went out).
+  try {
+    return execFileSync("gh", args, { encoding: "utf8", env: { ...process.env }, stdio: ["pipe", "pipe", "pipe"] });
+  } catch (error) {
+    const text = `${(error && error.stderr) || ""}${(error && error.stdout) || ""}`;
+    if (/HTTP 404|No parent issue found/i.test(String(text))) return ""; // expected per-issue probe miss
+    throw error; // anything else (e.g. stub bypass, unhandled args) must FAIL the scenario, not skew it
+  }
+}
+
+function runScenario(mode) {
+  const { issues, record } = scenarioSpec();
+  let resolved = 0;
+  const raw = withStubGh(() => {
+    if (mode === "per-issue") {
+      for (const issue of issues) {
+        const number = String(issue.number);
+        ghStubCall(["issue", "view", number, "--repo", issue.repo, "--json", "body,labels,state"]); // deterministic prefetch
+        ghStubCall(["api", `repos/${issue.repo}/issues/${issue.number}/parent`]); // native parent probe
+        ghStubCall(["issue", "view", number, "-R", issue.repo, "--comments"]); // mandated agent re-read
+        resolved += 1;
+      }
+    } else if (mode === "batched") {
+      // the REAL post-change read layer, executed against the stub gh on PATH
+      const ghProject = require(path.join(ROOT, "scripts", "lib", "gh-project.js"));
+      ghProject.probeIssueHierarchyFields({ refresh: true }); // fresh probe: count it (worst case)
+      const out = ghProject.batchIssueRead(issues);
+      resolved = out.size;
+      if (resolved !== issues.length) throw new Error(`batched scenario resolved ${resolved}/${issues.length}`);
+    } else {
+      throw new Error(`unknown --mode ${mode} (per-issue|batched)`);
+    }
+  });
+  const ledger = buildLedger(raw, { mode, scenario: { ...record, resolved } });
+  // fail-closed (RP-23 class): a scenario that recorded ZERO gh calls means the stub was
+  // bypassed or the pipeline never ran; an empty ledger must never pass for a measurement.
+  if (ledger.totals.all === 0) throw new Error("gh-call-ledger: scenario recorded zero gh invocations; stub bypassed?");
+  return ledger;
+}
+
+function compareLedgers(current, baseline) {
+  const sameScenario =
+    baseline.scenario &&
+    current.scenario &&
+    baseline.scenario.name === current.scenario.name &&
+    baseline.scenario.issueCount === current.scenario.issueCount &&
+    baseline.scenario.repoCount === current.scenario.repoCount;
+  return {
+    sameScenario: !!sameScenario,
+    baseline: { mode: baseline.mode, totals: baseline.totals },
+    current: { mode: current.mode, totals: current.totals },
+    savedCalls: baseline.totals.all - current.totals.all,
+    graphqlCalls: current.totals.graphql,
+  };
+}
+
+// ---- wrap mode ----
+const WRAP_SHIM = `#!/usr/bin/env bun
+const fs = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.GH_CALL_LEDGER_RAW, JSON.stringify(args) + "\\n");
+const r = spawnSync(process.env.GH_CALL_LEDGER_REAL_GH, args, { stdio: "inherit" });
+process.exit(r.status === null ? 1 : r.status);
+`;
+
+function runWrap(cmd, cmdArgs) {
+  const realGh = execFileSync("sh", ["-c", "command -v gh"], { encoding: "utf8" }).trim();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gh-call-ledger-wrap-"));
+  const binDir = path.join(tmp, "bin");
+  fs.mkdirSync(binDir, { recursive: true });
+  const rawPath = path.join(tmp, "raw.jsonl");
+  fs.writeFileSync(path.join(binDir, "gh"), WRAP_SHIM, { mode: 0o755 });
+  fs.writeFileSync(rawPath, "");
+  const env = {
+    ...process.env,
+    PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+    GH_CALL_LEDGER_RAW: rawPath,
+    GH_CALL_LEDGER_REAL_GH: realGh,
+  };
+  const run = spawnSync(cmd, cmdArgs, { stdio: "inherit", env });
+  const raw = readRawLedger(rawPath);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  return { ledger: buildLedger(raw, { mode: "wrap" }), exitStatus: run.status === null ? 1 : run.status };
+}
+
+// ---- CLI ----
+function parseFlags(argv) {
+  const flags = {};
+  const rest = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--out" || argv[i] === "--mode" || argv[i] === "--compare") {
+      flags[argv[i].slice(2)] = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === "--") {
+      rest.push(...argv.slice(i + 1));
+      break;
+    } else {
+      rest.push(argv[i]);
+    }
+  }
+  return { flags, rest };
+}
+
+function emit(ledger, outPath) {
+  const text = `${JSON.stringify(ledger, null, 2)}\n`;
+  if (outPath) {
+    fs.writeFileSync(outPath, text);
+    process.stderr.write(`gh-call-ledger: wrote ${outPath}\n`);
+  }
+  process.stdout.write(text);
+}
+
+function main(argv) {
+  const [command, ...restArgv] = argv;
+  const { flags, rest } = parseFlags(restArgv);
+  if (command === "scenario") {
+    const name = rest[0];
+    if (name !== "issue-read-100") throw new Error(`unknown scenario ${name} (issue-read-100)`);
+    const ledger = runScenario(flags.mode || "per-issue");
+    emit(ledger, flags.out);
+    if (flags.compare) {
+      const baseline = JSON.parse(fs.readFileSync(flags.compare, "utf8"));
+      const cmp = compareLedgers(ledger, baseline);
+      process.stdout.write(`${JSON.stringify({ compare: cmp }, null, 2)}\n`);
+      if (!cmp.sameScenario) {
+        process.stderr.write("gh-call-ledger: scenario mismatch vs baseline\n");
+        process.exit(3);
+      }
+    }
+    return;
+  }
+  if (command === "parse") {
+    const ledger = buildLedger(readRawLedger(rest[0]), { mode: "parse" });
+    emit(ledger, flags.out);
+    return;
+  }
+  if (command === "wrap") {
+    const [cmd, ...cmdArgs] = rest;
+    if (!cmd) throw new Error("wrap: missing command after --");
+    const { ledger, exitStatus } = runWrap(cmd, cmdArgs);
+    emit(ledger, flags.out);
+    process.exit(exitStatus);
+  }
+  process.stderr.write("usage: gh-call-ledger scenario issue-read-100 --mode per-issue|batched [--out f] [--compare baseline] | parse raw.jsonl [--out f] | wrap [--out f] -- cmd args...\n");
+  process.exit(2);
+}
+
+if (require.main === module) {
+  main(process.argv.slice(2));
+}
+
+module.exports = { classify, normalizeApiPath, buildLedger, runScenario, compareLedgers, scenarioSpec, BASELINE_PATH };

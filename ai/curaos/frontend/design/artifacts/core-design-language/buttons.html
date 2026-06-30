@@ -1,0 +1,145 @@
+<!-- @dsCard group="Buttons" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CuraOS · Buttons</title>
+<style>
+  :root{
+    --primary-50:#e8fbff;--primary-100:#c4f1fb;--primary-200:#91e2f3;--primary-300:#4fcbe8;
+    --primary-400:#1fb0d4;--primary-500:#0e90b8;--primary-600:#0d7197;--primary-700:#105a7c;
+    --primary-800:#114863;--primary-900:#0c2f44;
+    --error:#bb3328;--error-700:#7c211b;
+    --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Inter','Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:#eceff0;color:#161b1c;padding:24px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto}
+  .hdr{margin-bottom:24px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--primary-600)}
+  h1{font-size:32px;font-weight:600;letter-spacing:-0.015em;margin:6px 0 4px}
+  .sub{font-size:15px;color:#525c5e;max-width:64ch}
+  .panes{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:860px){.panes{grid-template-columns:1fr}}
+  .pane{border-radius:16px;padding:24px;border:1px solid}
+  .pane.light{background:#f6f8f8;color:#161b1c;border-color:#dde2e3;
+    --bg:#f6f8f8;--fg:#161b1c;--muted:#525c5e;--line:#dde2e3;--surf:#fff;
+    --pri:var(--primary-600);--pri-h:var(--primary-700);--pri-a:var(--primary-800);--pri-sub:var(--primary-50);--pri-fg:#105a7c;--on:#fff;
+    --err:var(--error);--err-h:var(--error-700)}
+  .pane.dark{background:#0d1112;color:#eceff0;border-color:#2c3537;
+    --bg:#0d1112;--fg:#eceff0;--muted:#9aa5a7;--line:#2c3537;--surf:#262d2e;
+    --pri:var(--primary-400);--pri-h:var(--primary-300);--pri-a:var(--primary-200);--pri-sub:#0a2030;--pri-fg:#4fcbe8;--on:#0d1112;
+    --err:#e5746c;--err-h:#f1a5a0}
+  .pane-tag{font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;opacity:.6;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+  .pane-tag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--primary-500)}
+  .lbl{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0;color:var(--muted);opacity:1;margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+  .lbl::before{content:"";width:14px;height:1px;background:var(--line)}
+  .lbl:first-of-type{margin-top:0}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  /* button system */
+  .btn{font-family:inherit;font-weight:600;letter-spacing:0.01em;border:1px solid transparent;
+    border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;
+    transition:background .14s cubic-bezier(.2,0,0,1),box-shadow .14s,transform .08s;white-space:nowrap}
+  .btn:active{transform:translateY(1px)}
+  .btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--pri-sub),0 0 0 1px var(--pri)}
+  .btn svg{width:1em;height:1em;stroke:currentColor;stroke-width:1.7;fill:none}
+  .sz-sm{font-size:13px;padding:6px 12px}.sz-md{font-size:14px;padding:9px 16px}.sz-lg{font-size:15px;padding:12px 22px}
+  .b-primary{background:var(--pri);color:var(--on)}
+  .b-primary:hover{background:var(--pri-h)}.b-primary:active{background:var(--pri-a)}
+  .b-secondary{background:var(--surf);color:var(--fg);border-color:var(--line)}
+  .b-secondary:hover{background:var(--bg);border-color:var(--pri)}
+  .b-ghost{background:transparent;color:var(--pri-fg)}
+  .b-ghost:hover{background:var(--pri-sub)}
+  .b-danger{background:var(--err);color:var(--on)}
+  .b-danger:hover{background:var(--err-h)}
+  .pane.dark .b-danger{color:#0d1112}
+  .btn[disabled]{opacity:.45;cursor:not-allowed;pointer-events:none}
+  .b-icon{padding:9px;border-radius:8px}
+  .spin{width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .7s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .state-note{font-size:11px;opacity:.5;margin-top:4px}
+  .grid-states{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+  .cell{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+  .cell small{font-size:10px;opacity:.5;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+
+  /* responsive: desktop / tablet / mobile */
+  @media(max-width:680px){
+    body{padding:16px}
+    .wrap{padding:0}
+    h1{font-size:26px}
+    .pane{padding:18px 16px}
+    .twocol{grid-template-columns:1fr!important}
+    .kpis{grid-template-columns:1fr 1fr!important}
+    .charts,.cards{grid-template-columns:1fr!important}
+    .dp{width:100%!important}
+  }
+  @media(max-width:400px){ .kpis{grid-template-columns:1fr!important} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="eyebrow">CuraOS · Aqua</div>
+    <h1>Buttons</h1>
+    <p class="sub">Four intents (primary, secondary, ghost, danger), three sizes, icon variant. Focus ring is a 3px primary-subtle halo plus 1px primary edge - visible in both themes, never clipped.</p>
+  </div>
+
+  <div class="panes" id="panes">
+    <div class="pane light"><div class="pane-tag">Light</div><div class="content"></div></div>
+    <div class="pane dark"><div class="pane-tag">Dark</div><div class="content"></div></div>
+  </div>
+</div>
+
+<script>
+  var ICON_PLUS='<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
+  var ICON_ARROW='<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+  var ICON_TRASH='<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>';
+  var ICON_GEAR='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>';
+
+  var html =
+    '<div class="lbl">Intent · medium</div>'+
+    '<div class="row">'+
+      '<button class="btn sz-md b-primary">'+ICON_PLUS+'New tenant</button>'+
+      '<button class="btn sz-md b-secondary">Export</button>'+
+      '<button class="btn sz-md b-ghost">Cancel</button>'+
+      '<button class="btn sz-md b-danger">'+ICON_TRASH+'Delete</button>'+
+    '</div>'+
+
+    '<div class="lbl">Sizes · primary</div>'+
+    '<div class="row">'+
+      '<button class="btn sz-sm b-primary">Small</button>'+
+      '<button class="btn sz-md b-primary">Medium</button>'+
+      '<button class="btn sz-lg b-primary">Large '+ICON_ARROW+'</button>'+
+    '</div>'+
+
+    '<div class="lbl">Icon-only</div>'+
+    '<div class="row">'+
+      '<button class="btn b-icon b-primary" aria-label="Add">'+ICON_PLUS+'</button>'+
+      '<button class="btn b-icon b-secondary" aria-label="Settings">'+ICON_GEAR+'</button>'+
+      '<button class="btn b-icon b-ghost" aria-label="Forward">'+ICON_ARROW+'</button>'+
+    '</div>'+
+
+    '<div class="lbl">States · primary</div>'+
+    '<div class="grid-states">'+
+      '<div class="cell"><small>Default</small><button class="btn sz-md b-primary">Save</button></div>'+
+      '<div class="cell"><small>Hover (sim)</small><button class="btn sz-md b-primary" style="background:var(--pri-h)">Save</button></div>'+
+      '<div class="cell"><small>Focus</small><button class="btn sz-md b-primary" style="box-shadow:0 0 0 3px var(--pri-sub),0 0 0 1px var(--pri)">Save</button></div>'+
+      '<div class="cell"><small>Loading</small><button class="btn sz-md b-primary"><span class="spin"></span>Saving</button></div>'+
+      '<div class="cell"><small>Disabled</small><button class="btn sz-md b-primary" disabled>Save</button></div>'+
+    '</div>'+
+
+    '<div class="lbl">Try it · click for loading state</div>'+
+    '<div class="row"><button class="btn sz-md b-primary" onclick="load(this)">'+ICON_PLUS+'Provision stack</button>'+
+    '<button class="btn sz-md b-secondary" onclick="load(this)">Run health check</button></div>';
+
+  document.querySelectorAll('.content').forEach(function(c){c.innerHTML=html;});
+
+  function load(btn){
+    if(btn.dataset.busy)return; btn.dataset.busy=1;
+    var orig=btn.innerHTML; btn.innerHTML='<span class="spin"></span>Working';
+    setTimeout(function(){btn.innerHTML=orig;delete btn.dataset.busy;},1400);
+  }
+</script>
+</body>
+</html>

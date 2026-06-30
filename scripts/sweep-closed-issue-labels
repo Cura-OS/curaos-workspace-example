@@ -1,0 +1,213 @@
+#!/usr/bin/env bash
+# Sweep CLOSED issues across the org: strip every stranded workflow-state label.
+#
+# This is the DURABLE answer to the recurring "closed issues keep their state
+# labels" corruption. When a PR with "Closes #N" merges, GitHub closes issue #N
+# but leaves EVERY label intact - so the workflow-state labels (ready-for-agent,
+# needs-triage, needs-info, ready-for-human, agent-PR-open, agent-claimed:*)
+# strand on the now-CLOSED issue and the tracker view becomes unreadable
+# ("needs-triage on a done issue", "ready-for-agent on a merged issue").
+#
+# A CLOSED issue must carry ZERO workflow-state labels. Only the CATEGORY labels
+# (bug / enhancement) and the orthogonal MARKER labels (foresight / blocked) may
+# persist post-close - they describe what the issue WAS, not its live state.
+#
+# This script re-scans every closed issue in the org and removes any stranded
+# state/runtime label, idempotently. It does NOT depend on an orchestrator
+# remembering to strip per-PR; run it (or cron it) and the tracker converges.
+# It is the recurring converger AND the one-time backfill for historical strands.
+#
+# strip predicate (a CLOSED issue's label is removed iff it is one of):
+#   ready-for-agent | needs-triage | needs-info | ready-for-human   (state labels)
+#   agent-PR-open | agent-claimed:*                                  (runtime markers)
+# PRESERVED on closed issues: bug | enhancement (category), foresight | blocked
+# (markers - they are historical context, not live state).
+#
+# Default mode is DRY-RUN (lists would-STRIP / would-SKIP, mutates nothing).
+# Pass --apply to actually remove the labels.
+#
+# READ STRATEGY (RP-37): the org-wide dry-run (the per-wave wave-done check) uses
+# the SEARCH fast path: ONE `search/issues?q=org:... is:issue is:closed label:<L>`
+# call per stranded label (a handful of Search-budget calls instead of downloading
+# every closed issue from every org repo). A call-count ledger is printed.
+#   - Residual agent-claimed:* pass: the suffix namespace is partly dynamic
+#     (run-scoped ids like agent-claimed:codex-f0e0d19b) and GitHub search cannot
+#     wildcard labels, so the fast path searches the stable harness names
+#     (override via SWEEP_CLAIMED_LABELS, space-separated) and the DEEP scan
+#     catches arbitrary suffixes.
+#   - DEEP scan (--deep, or implied by --apply / --repo): the original full REST
+#     enumeration (org repos + every closed issue per repo). Run it weekly as the
+#     backstop for search-index lag + dynamic agent-claimed:* suffixes.
+#   - --apply ALWAYS uses the deep scan as its confirmation path: the search index
+#     can lag live label state, so label mutations are never driven by search
+#     results alone.
+# A search whose fetched item count is below its total_count is TRUNCATED
+# (search caps at 1000 results/query): fail closed, exit 70, mutate nothing.
+#
+# Usage:
+#   sweep-closed-issue-labels [--apply] [--deep] [--repo OWNER/REPO]
+#     --repo limits the sweep to one repo (default: whole org).
+#     --deep forces the full REST enumeration in dry-run (weekly backstop).
+#
+# Exit: 0 when clean or after a successful --apply; 3 when a dry-run finds
+# strandable labels (so it can gate a wave-done stop-predicate: a non-zero
+# dry-run = "closed issues still carry state labels" = NOT wave-done);
+# 70 when any read fails or a search result is truncated (fail closed).
+set -uo pipefail
+
+APPLY=0
+DEEP=0
+ONE_REPO=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply) APPLY=1 ;;
+    --deep) DEEP=1 ;;
+    --repo) ONE_REPO="$2"; shift ;;
+    -h|--help) sed -n '2,54p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# Agent shells can carry a narrow GITHUB_TOKEN that lacks org/project scope.
+# Unset it so gh uses GH_TOKEN or the project-scoped keyring login.
+gh() { env -u GITHUB_TOKEN command gh "$@"; }
+
+OWNER="your-org"
+# The labels that must NOT survive on a CLOSED issue are matched inline in the jq
+# filter below: ready-for-agent / needs-triage / needs-info / ready-for-human /
+# agent-PR-open / agent-claimed:* . Category (bug/enhancement) + markers
+# (foresight/blocked) are preserved.
+
+# Gather closed issues carrying any stranded state/runtime label.
+# Output lines: <owner/repo>\t<number>\t<space-separated labels to strip>
+filter_stranded() {
+  jq -r '
+    .[]
+    | . as $i
+    | ([$i.labels[]
+        | select(
+            . == "ready-for-agent" or . == "needs-triage" or . == "needs-info"
+            or . == "ready-for-human" or . == "agent-PR-open"
+            or (startswith("agent-claimed:"))
+          )]) as $strip
+    | select(($strip | length) > 0)
+    # The stripped workflow labels are canonical slug labels with no spaces.
+    | "\($i.repo)\t\($i.number)\t\($strip | join(" "))"
+  '
+}
+
+repo_closed_issues() {
+  local repo="$1" raw
+  if ! raw=$(gh api -X GET "repos/$repo/issues" --paginate --slurp -f state=closed -f per_page=100 2>&1); then
+    echo "sweep-closed-issue-labels: gh issues REST read failed for $repo: $raw" >&2
+    return 70
+  fi
+  printf '%s' "$raw" | jq -c --arg r "$repo" '[.[][] | select(has("pull_request") | not) | {repo:$r, number, labels:[.labels[].name]}]'
+}
+
+org_repos() {
+  local raw
+  if ! raw=$(gh api -X GET "orgs/$OWNER/repos" --paginate --slurp -f per_page=100 2>&1); then
+    echo "sweep-closed-issue-labels: gh repos REST read failed: $raw" >&2
+    return 70
+  fi
+  printf '%s' "$raw" | jq -r '.[][] | select(.archived != true) | .full_name'
+}
+
+gather() {
+  local repo json repos
+  if [ -n "$ONE_REPO" ]; then
+    json="$(repo_closed_issues "$ONE_REPO")" || return 70
+    printf '%s' "$json" | filter_stranded
+    return 0
+  fi
+
+  repos="$(org_repos)" || return 70
+  while IFS= read -r repo; do
+    [ -z "$repo" ] && continue
+    json="$(repo_closed_issues "$repo")" || return 70
+    printf '%s' "$json" | filter_stranded
+  done <<< "$repos"
+}
+
+# RP-37 search fast path: one Search-API call per stranded label. The fixed
+# state/runtime labels are enumerable; agent-claimed:* gets a residual pass over
+# the stable harness names only (search cannot wildcard labels; dynamic run-id
+# suffixes are the weekly --deep scan's job).
+STATE_LABELS=(ready-for-agent needs-triage needs-info ready-for-human agent-PR-open)
+read -r -a CLAIMED_LABELS <<< "${SWEEP_CLAIMED_LABELS:-agent-claimed:claude agent-claimed:codex}"
+SEARCH_LEDGER=$(( ${#STATE_LABELS[@]} + ${#CLAIMED_LABELS[@]} ))
+
+search_stranded() {
+  local L raw fetched total
+  for L in "${STATE_LABELS[@]}" "${CLAIMED_LABELS[@]}"; do
+    if ! raw=$(gh api -X GET search/issues --paginate --slurp \
+        -f q="org:$OWNER is:issue is:closed label:\"$L\"" -f per_page=100 2>&1); then
+      echo "sweep-closed-issue-labels: gh search read failed for label $L: $raw" >&2
+      return 70
+    fi
+    fetched=$(printf '%s' "$raw" | jq '[.[].items | length] | add // 0')
+    total=$(printf '%s' "$raw" | jq '.[0].total_count // 0')
+    if [ -z "$fetched" ] || [ -z "$total" ] || [ "$fetched" -lt "$total" ]; then
+      echo "sweep-closed-issue-labels: search for label $L returned ${fetched:-?} of ${total:-?} results: TRUNCATED (search caps at 1000/query); refusing to sweep - run --deep" >&2
+      return 70
+    fi
+    printf '%s' "$raw" \
+      | jq -c '[.[].items[] | {repo: (.repository_url | sub(".*/repos/"; "")), number, labels: [.labels[].name]}]' \
+      | filter_stranded
+  done
+}
+
+MODE="deep"
+if [ "$APPLY" -eq 1 ] || [ "$DEEP" -eq 1 ] || [ -n "$ONE_REPO" ]; then
+  # deep scan: --apply confirmation path (search-index lag), weekly --deep
+  # backstop, and the single-repo scope (already cheap via REST enumeration).
+  if ! gathered="$(gather)"; then
+    exit 70
+  fi
+else
+  MODE="search"
+  if ! gathered="$(search_stranded)"; then
+    exit 70
+  fi
+  # an issue carrying 2+ stranded labels surfaces in 2+ label searches; each hit
+  # already lists ALL its strip labels, so dedupe by repo#number keeps one row.
+  gathered="$(printf '%s\n' "$gathered" | awk -F'\t' 'NF && !seen[$1 FS $2]++')"
+fi
+
+found=0
+cleared=0
+failed=0
+while IFS=$'\t' read -r repo num strip; do
+  [ -z "$repo" ] && continue
+  found=$((found+1))
+  if [ "$APPLY" -eq 1 ]; then
+    args=()
+    for l in $strip; do args+=(--remove-label "$l"); done
+    if gh issue edit "$num" -R "$repo" "${args[@]}" >/dev/null 2>&1; then
+      echo "  STRIP  $repo#$num - removed: $strip"
+      cleared=$((cleared+1))
+    else
+      echo "  FAIL   $repo#$num - could not strip: $strip" >&2
+      failed=$((failed+1))
+    fi
+  else
+    echo "  would-STRIP  $repo#$num - $strip"
+  fi
+done <<< "$gathered"
+
+if [ "$APPLY" -eq 1 ]; then
+  if [ "$failed" -gt 0 ]; then
+    echo "swept: $cleared closed issue(s) cleaned, $failed failed" >&2
+    exit 1
+  fi
+  echo "swept: $cleared closed issue(s) cleaned"
+  exit 0
+else
+  echo "dry-run: $found closed issue(s) carry stranded state labels"
+  if [ "$MODE" = "search" ]; then
+    echo "ledger: $SEARCH_LEDGER search call(s) (1 per stranded label; agent-claimed:* run-id suffixes need --deep)"
+  fi
+  [ "$found" -gt 0 ] && exit 3 || exit 0
+fi

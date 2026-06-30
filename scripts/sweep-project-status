@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# Sweep the CuraOS Roadmap Project: advance any CLOSED-COMPLETED item still parked
+# at an ACTIVE board status (Ready / In Progress / In Review) to Done.
+#
+# This is the DURABLE answer to the recurring "closed issue is stuck In Review on
+# the board" drift. When a PR with "Closes #N" merges, GitHub closes issue #N but
+# its Project (board) Status field is NOT touched — so a genuinely-done issue can
+# sit at "In Review" (or "In Progress" / "Ready") on the board indefinitely. That
+# is exactly how M7-S5.3 #114 sat "In Review" for 5 days while CLOSED/COMPLETED,
+# making the board read "we never finished it" when in fact it was done.
+#
+# A CLOSED-COMPLETED Project item must show board Status = Done. The sibling
+# converger sweep-closed-issue-labels handles LABELS; this one handles the BOARD
+# STATUS FIELD. Together they keep the tracker honest without an orchestrator
+# remembering to flip the field per merge.
+#
+# Scope of the flip (an item is advanced to Done iff ALL hold):
+#   - its linked issue is CLOSED with stateReason == COMPLETED, AND
+#   - its current board Status is one of: Ready | In Progress | In Review.
+# Left UNTOUCHED:
+#   - Done items (already correct)
+#   - Backlog / Blocked items (may legitimately hold OPEN foresight / blocked work;
+#     and a CLOSED-as-not-planned item parked in Backlog is a deliberate park, not
+#     a strand — we only converge the active "in-flight" lane statuses)
+#   - any item whose issue is still OPEN
+#   - any item closed as NOT_PLANNED (superseded/wontfix) — its board state is a
+#     human decision, not an auto-Done.
+#
+# Default mode is DRY-RUN (lists would-ADVANCE, mutates nothing).
+# Pass --apply to actually set Status=Done.
+#
+# Usage:
+#   sweep-project-status [--apply]
+#
+# Exit: 0 when clean or after a successful --apply; 3 when a dry-run finds a
+# CLOSED-COMPLETED item stuck at an active status (so it can gate a wave-done
+# stop-predicate: a non-zero dry-run = "a done issue is still In Review on the
+# board" = NOT wave-done); 2 when the item read fills the --limit cap (possible
+# truncation: fail closed, mutate nothing).
+set -uo pipefail
+
+APPLY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply) APPLY=1 ;;
+    -h|--help) sed -n '2,46p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+gh() { env -u GITHUB_TOKEN command gh "$@"; }
+
+OWNER="your-org"
+PROJECT_TITLE="CuraOS Roadmap"
+DONE_OPTION_ID="95441b7d"        # Status -> Done (cached; verified below)
+
+# Resolve project number + node id dynamically (titles are stable; numbers can
+# vary across orgs — never hardcode the number).
+proj=$(gh project list --owner "$OWNER" --format json 2>/dev/null \
+  | jq -r --arg t "$PROJECT_TITLE" '.projects[] | select(.title==$t) | "\(.number)\t\(.id)"')
+PROJ_NUM=$(printf '%s' "$proj" | cut -f1)
+PROJ_ID=$(printf '%s' "$proj" | cut -f2)
+if [ -z "$PROJ_NUM" ] || [ -z "$PROJ_ID" ]; then
+  echo "could not resolve project '$PROJECT_TITLE' for owner $OWNER" >&2
+  exit 2
+fi
+
+# Resolve Status field id + verify the Done option id still matches (guards against
+# a renamed/re-IDed option silently no-opping the flip).
+sf=$(gh project field-list "$PROJ_NUM" --owner "$OWNER" --format json 2>/dev/null \
+  | jq -r '.fields[] | select(.name=="Status")')
+STATUS_FIELD_ID=$(printf '%s' "$sf" | jq -r '.id')
+DONE_ID=$(printf '%s' "$sf" | jq -r '.options[] | select(.name=="Done") | .id')
+if [ -z "$STATUS_FIELD_ID" ] || [ -z "$DONE_ID" ]; then
+  echo "could not resolve Status field / Done option on project $PROJ_NUM" >&2
+  exit 2
+fi
+if [ "$DONE_ID" != "$DONE_OPTION_ID" ]; then
+  echo "note: Done option id changed ($DONE_OPTION_ID -> $DONE_ID); using live value" >&2
+  DONE_OPTION_ID="$DONE_ID"
+fi
+
+# The item read is capped by --limit; a full page means rows past the cap were
+# silently dropped and a stuck item could false-pass the sweep. Fail closed at
+# the cap (RP-07). SWEEP_ITEM_LIMIT is overridable for tests/ops.
+ITEM_LIMIT="${SWEEP_ITEM_LIMIT:-500}"
+items_json=$(gh project item-list "$PROJ_NUM" --owner "$OWNER" --format json --limit "$ITEM_LIMIT" 2>/dev/null)
+item_count=$(printf '%s' "$items_json" | jq -r '.items | length' 2>/dev/null)
+if [ -z "$item_count" ] || [ "$item_count" = "null" ]; then
+  echo "could not list items for project #$PROJ_NUM" >&2
+  exit 2
+fi
+if [ "$item_count" -ge "$ITEM_LIMIT" ]; then
+  echo "sweep-project-status: item list filled the --limit $ITEM_LIMIT cap ($item_count rows): result may be TRUNCATED; refusing to sweep a partial board" >&2
+  exit 2
+fi
+
+# Candidate items: board Status in the active set. Output: itemid\trepo\tnumber\tstatus
+candidates=$(printf '%s' "$items_json" \
+  | jq -r '
+    .items[]
+    | select(.content.number != null)
+    | select(.status == "Ready" or .status == "In Progress" or .status == "In Review")
+    | "\(.id)\t\(.content.repository)\t\(.content.number)\t\(.status)"
+  ')
+
+found=0
+advanced=0
+while IFS=$'\t' read -r itemid repo num bstatus; do
+  [ -z "$itemid" ] && continue
+  # Confirm the underlying issue is CLOSED/COMPLETED before advancing.
+  st=$(gh issue view "$num" -R "$repo" --json state,stateReason 2>/dev/null \
+    | jq -r '"\(.state)/\(.stateReason)"')
+  [ "$st" != "CLOSED/COMPLETED" ] && continue
+  found=$((found+1))
+  if [ "$APPLY" -eq 1 ]; then
+    if gh project item-edit --id "$itemid" --project-id "$PROJ_ID" \
+         --field-id "$STATUS_FIELD_ID" --single-select-option-id "$DONE_OPTION_ID" \
+         >/dev/null 2>&1; then
+      echo "  ADVANCE  $repo#$num — $bstatus -> Done"
+      advanced=$((advanced+1))
+    else
+      echo "  FAIL     $repo#$num — could not set Done (was $bstatus)" >&2
+    fi
+  else
+    echo "  would-ADVANCE  $repo#$num — $bstatus -> Done (issue CLOSED/COMPLETED)"
+  fi
+done <<< "$candidates"
+
+if [ "$APPLY" -eq 1 ]; then
+  echo "swept: $advanced board item(s) advanced to Done"
+  exit 0
+else
+  echo "dry-run: $found closed-completed item(s) stuck at active board status"
+  [ "$found" -gt 0 ] && exit 3 || exit 0
+fi

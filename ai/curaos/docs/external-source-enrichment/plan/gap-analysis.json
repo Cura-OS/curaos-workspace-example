@@ -1,0 +1,2198 @@
+{
+  "generated_for": "XSRC-EPIC",
+  "phase": "5",
+  "authored": {
+    "summary": "Synthesized from 8 domain maps + data/UI/workflow crosswalks against verified local repo state (curaos/backend/services, tools/codegen, packages). CuraOS owns a strong generator-first substrate (codegen mold with .tsp.hbs + .asyncapi.yaml.hbs, sdk-emit, live-emit, ui-app-emit, service-seed-emit) and ~25 real-working services. The gaps cluster in: (1) the FHIR-R4 clinical resource set (10+ scaffold-only healthstack services with NO src), (2) the revenue cycle (X12 837/835/270/271 + paper forms + fee schedule, no x12-sdk package exists), (3) cross-cutting UI archetypes missing from ui-kit (Kanban, Calendar, Wizard, Entity360, ApprovalInbox, Ledger, etc.), (4) data-truth violations (healthstack-billing repository is in-memory Map, several FKs in-memory), (5) generator capability gaps (single CRUD screen archetype, no dual person/management surface emission, no AI/MCP/connector-registry primitives). Generator-first is mandatory: every new-entity gap lands as .tsp contract -> @curaos/*-sdk regen -> emitServiceLive scaffold -> emitUiApp wiring, with reusable primitives folded into tools/codegen, never per-service hand-edits. Person-centric lens dominant: every gap yields a person surface + management surface on shared contract, no source business/management/compliance feature dropped.",
+    "verified_local_state": {
+      "scaffold_only_no_src": [
+        "healthstack-problems-service",
+        "healthstack-meds-service",
+        "healthstack-lab-service",
+        "healthstack-imaging-service",
+        "healthstack-careplans-service",
+        "healthstack-quality-service",
+        "healthstack-claims-service",
+        "healthstack-devices-service",
+        "business-cases-service",
+        "business-projects-service"
+      ],
+      "data_truth_violations": [
+        "healthstack-billing-service/src/healthstack-billings/billing.repository.ts uses new Map() for invoices/estimates/payments/claims/copays (drizzle schema noted as 'next step') - violates curaos-demo-sample-data-rule"
+      ],
+      "missing_packages": [
+        "@curaos/x12-sdk (claims EDI) ABSENT",
+        "@curaos/tax-engine ABSENT",
+        "@curaos/currency ABSENT",
+        "@curaos/connector-sdk ABSENT",
+        "@curaos/fhir-client is README-only stub"
+      ],
+      "real_working_anchors": [
+        "orders-service (controller+repository+seed)",
+        "terminology-service (Snowstorm-backed, full src)",
+        "encounter-service (DTO+controller present, service thin 462B = partial)",
+        "codegen mold ships both .tsp.hbs and .asyncapi.yaml.hbs (AsyncAPI scaffold exists; gap is per-domain-event richness not absence)"
+      ]
+    },
+    "functional_gaps": [
+      {
+        "id": "clinical-fhir-resource-set",
+        "category": "functional",
+        "area": "healthcare clinical data entities + APIs",
+        "title": "FHIR-R4 clinical resource services (Observation/Condition/MedicationRequest+Allergy/DiagnosticReport-lab/ImagingStudy/CarePlan/Immunization) are scaffold-only with NO src despite patient-experience read-model already rendering them from seed",
+        "local_evidence": "healthstack-{problems,meds,lab,imaging,careplans,devices}-service all NO src (verified); patient-core-service/src/patient-experience/patient-experience.read-model.ts already renders vitals/problems/meds/allergies/care-plan from seed = consumer exists, data plane faked",
+        "external_evidence": "fhir-on-vista (Apache-2.0) ObservationProvider/ConditionProvider, vista-fhir-codex (permissive) GETVIT/GETCOND/GETLAB/GETMED/GETALGY/GETIMM, openmrs-fhir2 (MPL) R4 providers, openmrs-core (MPL) rich domain models",
+        "best_source": "fhir-on-vista + vista-fhir-codex (Apache-2.0/permissive, port-adapt safe) for FHIR provider shape; openmrs-core (MPL, file-notice) for domain depth",
+        "suggested_mode": "E port-adapt",
+        "why": "These back the chart, AVS, CDS, quality measures, billing diagnosis pointers; foundational missing data plane that many other mapped features depend on; permissive sources exist",
+        "source_files": [
+          "external-sources/healthcare/.../fhir-on-vista/java-api/.../provider/ObservationProvider.java",
+          "external-sources/healthcare/worldvista/VistA-FHIR-Server-Codex/src/C0FHIR.m (GETVIT/GETCOND/GETLAB/GETMED/GETALGY/GETIMM)",
+          "external-sources/healthcare/openmrs-org/openmrs-core/api/src/main/java/org/openmrs/Condition.java"
+        ],
+        "target_files": [
+          "curaos/backend/services/healthstack-{problems,meds,lab,imaging,careplans,devices}-service/specs/<svc>.tsp (NEW)",
+          "curaos/backend/services/healthstack-*/specs/<svc>.asyncapi.yaml (NEW)",
+          "curaos/backend/services/healthstack-*/src/* (generator-emitted)",
+          "curaos/backend/packages/<svc>-sdk (generated)"
+        ],
+        "required_new": [
+          "6+ FHIR contracts (Observation, Condition, MedicationRequest+Dosage+Dispense+Administration, AllergyIntolerance, DiagnosticReport+Observation+Specimen, ImagingStudy, CarePlan+Goal+CareTeam, Immunization+Recommendation)",
+          "generated SDKs per service",
+          "drizzle schema + migration + gen:service-seed per service",
+          "wire patient-experience read-model to real services in live mode"
+        ],
+        "steps": [
+          "1. Author each FHIR-R4 contract in the SERVICE specs/<svc>.tsp (NOT the mold): LOINC/UCUM Observation, clinical/verification-status Condition, RxNorm MedicationRequest, AllergyIntolerance criticality/reaction, DiagnosticReport+Specimen, ImagingStudy series/instance, CarePlan+Goal+CareTeam",
+          "2. Add domain events to .asyncapi.yaml (reference-only, no PHI)",
+          "3. Regenerate SDK via sdk-emit",
+          "4. emitServiceLive scaffold + drizzle migration + gen:service-seed (database-backed demo per demo-data rule)",
+          "5. Bind via terminology-service for coded fields",
+          "6. Repoint patient-experience read-model vitals/problems/meds/allergies/care-plan at real services (keep seed for offline)"
+        ],
+        "tests": [
+          "contract: FHIR-R4 validation per resource (HAPI/fhir.js in CI)",
+          "integration: real Postgres CRUD + terminology binding",
+          "e2e: clinician write -> patient-app renders",
+          "PHI-boundary: ConsentGuard denial test",
+          "overlay-superset drift test folded into generator"
+        ],
+        "migration_notes": "PHI lives in healthstack.* overlay schema via cross-schema FK to core.patients with LEFT JOIN read view; 6-layer PHI boundary preserved; money n/a; soft-delete only",
+        "license_notes": "vista sources Apache-2.0/permissive = port-adapt safe; openmrs MPL = file-level copyleft, port pattern not verbatim; bahmni AGPL = reference-only",
+        "risk": "medium - broad surface; mitigate by driving every resource from contract so coverage is checklist-verifiable",
+        "no_loss_check": "Full FHIR field sets (multi-component BP, reference ranges, interpretation flags, criticality, staging, series/instance) preserved on clinician surface; person-facing plain-language + self-capture added without losing clinician entry",
+        "generator_first_target": "contract-typespec (per-service specs/<svc>.tsp) then SDK then emitServiceLive"
+      },
+      {
+        "id": "x12-revenue-cycle",
+        "category": "functional",
+        "area": "healthcare.revenue + crm-insurance claims/billing",
+        "title": "Real X12 EDI revenue cycle absent: 837P/837I generation, 835 ERA auto-posting, 270/271 eligibility, CMS-1500/UB-04 paper forms, fee schedule/charge master; current submit only flips status='submitted', eligibility only flips a stored string, billing repo is in-memory Map",
+        "local_evidence": "healthstack-billing-service/src/healthstack-billings/billing.repository.ts uses new Map() (verified data-truth violation); POST /claims/:id/submit sets status only; healthstack-claims-service NO src; NO @curaos/x12 package exists (verified packages dir)",
+        "external_evidence": "OpenEMR (GPL) Claim.php (2287 LoC) + X125010837P.php + X125010837I.php + ParseERA.php (835) + EDI270.php + Hcfa1500.php; OpenHospital (GPL) PricesList fee schedule",
+        "best_source": "openemr (GPL) - X12 segments are ANSI standard (not copyrightable), port LOGIC to fresh TS; openhospital PricesList for fee-schedule data model",
+        "suggested_mode": "E port-adapt (X12 logic) into a NEW @curaos/x12-sdk generator-first package",
+        "why": "Single highest-value RCM gap; without real 837/835/270/271 the revenue cycle is non-functional past 'submitted'; X12 is ANSI standard so logic is portable without GPL contamination",
+        "source_files": [
+          "external-sources/healthcare/openemr/src/Billing/Claim.php",
+          "external-sources/healthcare/openemr/src/Billing/X125010837P.php",
+          "external-sources/healthcare/openemr/src/Billing/X125010837I.php",
+          "external-sources/healthcare/openemr/src/Billing/ParseERA.php",
+          "external-sources/healthcare/openemr/src/Billing/EDI270.php",
+          "external-sources/healthcare/openemr/src/Billing/Hcfa1500.php"
+        ],
+        "target_files": [
+          "curaos/backend/packages/x12-sdk (NEW @curaos/x12 generator-first SDK)",
+          "curaos/backend/services/healthstack-claims-service/specs/healthstack-claims.tsp (NEW canonical Claim+Coverage contract)",
+          "curaos/backend/services/healthstack-claims-service/src (promote scaffold)",
+          "curaos/backend/services/healthstack-billing-service/drizzle/schema.ts (move off in-memory; add remittance/adjustment/coverage/fee_schedule tables)",
+          "curaos/backend/services/accounting-core-service (neutral ledger posting target)"
+        ],
+        "required_new": [
+          "@curaos/x12-sdk (837P/837I emitter, 835 parser, 270 builder/271 parser, CMS-1500/UB-04 PDF emitter)",
+          "Claim+Coverage+RemittanceAdvice+Adjustment(CARC/RARC)+FeeSchedule contracts",
+          "fixture conformance snapshot tests (known-good 837/835)",
+          "payer-connection config + secrets"
+        ],
+        "steps": [
+          "1. Author canonical Claim+Coverage+RemittanceAdvice+FeeSchedule contracts (claim, subscriber, payer, provider, service lines, NDC, modifiers, CARC/RARC) - contract-first",
+          "2. Create @curaos/x12-sdk with 837P/837I emitter (port OpenEMR loop logic), 835 parser (CLP/CAS/SVC + imbalance correction), 270 builder/271 parser, CMS-1500/UB-04 PDF emitter; ISA/GS envelope + batch control numbers",
+          "3. Add fixture conformance snapshot tests in SDK",
+          "4. CRITICAL: move healthstack-billing repository off Map() to Postgres drizzle (fix data-truth); add remittance/adjustment/coverage/fee_schedule migrations + gen:service-seed",
+          "5. Promote healthstack-claims-service: wire submitClaim->SDK, persist X12+batch, emit claim.submitted; 835 write-through to billing_invoice balance + accounting-core ledger; SLEOB auto-secondary",
+          "6. Real 270 send/271 parse feeds Estimate copay; person-app claim-status timeline + biller console",
+          "7. Fold every X12 segment edge case back into the SDK per generator-evolution"
+        ],
+        "tests": [
+          "837P/837I snapshot vs known-good",
+          "835 CLP/CAS/SVC parse + balance reconciliation",
+          "270/271 round-trip",
+          "CMS-1500/UB-04 box-coordinate fidelity",
+          "real-Postgres persistence (fixes data-truth)"
+        ],
+        "migration_notes": "money = integer minor units int64/bigint; Coverage PHI in healthstack overlay schema, neutral cores reference-only; encounterRef opaque (no PHI in events)",
+        "license_notes": "openemr GPL-3 = NO verbatim copy; X12 5010 segment layout is ANSI standard (not copyrightable) so port logic as fresh TS; legal-review on any PHP structure lifted",
+        "risk": "high - X12 correctness is payer-tested + financial; needs clearinghouse conformance fixtures + balance-reconciliation tests",
+        "no_loss_check": "837P/I + envelopes + batch control + subscriber/payer/provider/service loops + NDC/modifiers + 835 adjustments + EOB + auto-secondary + paper forms + AR aging + denial CARC/RARC all preserved on management surface; person gets transparent statement + status timeline + up-front copay",
+        "generator_first_target": "sdk-package (@curaos/x12) + contract-typespec (claims/coverage/fee-schedule)"
+      },
+      {
+        "id": "cds-rules-engine",
+        "category": "functional",
+        "area": "healthcare.care clinical decision support + rules",
+        "title": "Clinical Decision Support + rules/risk engine entirely absent (most-covered source domain, 16 features): drug-allergy/interaction checks, contraindication, reminders, risk scoring, care-gap nudges, no-code rule authoring",
+        "local_evidence": "healthstack-quality-service NO src; no CDS/rules/risk service; builder-core has validation/conditional rules + workflow-core BPMN as substrate but no clinical rules/risk-scoring layer",
+        "external_evidence": "asrcm (permissive) RiskModel/ModelTerm scoring engine (Boolean/Numerical/Discrete/Procedure terms); RAPTOR (permissive) contraindication rules; vista-m File 801 Reminders; vista-dashboard-rules (Apache-2.0) table-driven cohort-scoped engine + authoring UI; aware (permissive) CPRS CDS + escalation",
+        "best_source": "asrcm (permissive, reusable scoring engine) + vista-dashboard-rules (Apache-2.0, rules+authoring) + RAPTOR (permissive, contraindication)",
+        "suggested_mode": "E port-adapt into healthstack-quality-service CDS slice + builder-core authoring",
+        "why": "Safety+quality differentiator; unblocks alerts, critical-result follow-up, immunization recommendations, quality measures, drug-allergy/interaction safety; all sources permissive",
+        "source_files": [
+          "external-sources/healthcare/vhainnovations/ASRCM/srcalc/.../domain/model/RiskModel.java",
+          "external-sources/healthcare/.../vista-dashboard-rules (C9C RULES ENGINE, C9CWBS RPCAR/RPCDR)",
+          "external-sources/healthcare/.../RAPTOR (raptor_contraindication_rule)"
+        ],
+        "target_files": [
+          "curaos/backend/services/healthstack-quality-service/specs/healthstack-quality.tsp (CDS+rules+risk-models)",
+          "curaos/backend/services/healthstack-quality-service/src/{rules,risk-models,recommendations}",
+          "curaos/backend/services/builder-core-service (no-code rule authoring UI)",
+          "curaos/tools/codegen/src/sdk-emit.ts"
+        ],
+        "required_new": [
+          "CDS rule + term-based risk-model + recommendation contracts (CDS-Hooks/CQL aligned)",
+          "cds.alert/cds.recommendation events",
+          "port asrcm scoring engine + vista cohort-scoped eval + RAPTOR contraindication",
+          "no-code rule authoring via builder-core"
+        ],
+        "steps": [
+          "1. Define CDS rule + risk-model (term scoring) + recommendation contracts; align CDS-Hooks/CQL",
+          "2. Add cds.alert/cds.recommendation events",
+          "3. Regenerate SDK",
+          "4. Port asrcm term-scoring + vista cohort-rule eval + RAPTOR contraindication; expose builder-core no-code authoring",
+          "5. Wire alerts to notify+tasks AND patient-app nudges; migration + seed",
+          "6. Drug-allergy check consumed by meds prescribing; contrast check by imaging"
+        ],
+        "tests": [
+          "rule-eval determinism",
+          "risk-model coefficient calc (asrcm pattern)",
+          "drug-allergy/interaction check",
+          "escalation-on-no-ack",
+          "golden-file vs source outputs"
+        ],
+        "migration_notes": "PHI inputs gated by ConsentGuard; rules surface clinician alerts AND person nudges from one engine; PHI scrubbed from any external LLM (Presidio)",
+        "license_notes": "asrcm/vista-dashboard-rules/RAPTOR/aware all permissive (Apache-2.0/MIT-style) = port-adapt safe with NOTICE",
+        "risk": "high - regulatory-graded safety; XL complexity; mitigate with golden-file tests vs source",
+        "no_loss_check": "Reminder definitions, risk-model terms/scoring, contraindication rules, cohort scoping, temporal logic, override-per-document, authoring UI, chart-context CDS all preserved on management surface; person gets plain-language reminders/nudges",
+        "generator_first_target": "contract-typespec (CDS+rules+risk) + builder-core authoring"
+      },
+      {
+        "id": "avs-after-visit-summary",
+        "category": "functional",
+        "area": "healthcare.encounter person-facing artifact",
+        "title": "After-Visit Summary absent though all building blocks exist (clinical-doc FHIR Composition + reports-service Gotenberg PDF + patient-experience aggregate); highest-leverage person-centric deliverable",
+        "local_evidence": "No AVS capability; clinical-doc-service (Composition), reports-service (Gotenberg), patient-experience aggregate all present",
+        "external_evidence": "AVS (VA After Visit Summary, permissive) aggregates demographics+labs+meds+education+followups into patient handout - canonical person-facing artifact",
+        "best_source": "avs (permissive, port-adapt/verbatim-with-NOTICE ok)",
+        "suggested_mode": "E port-adapt onto existing primitives",
+        "why": "Cheapest high-value person-centric deliverable per lens; turns visit into patient-owned summary on existing building blocks",
+        "source_files": [
+          "external-sources/healthcare/vhainnovations/AVS/ll-avs/ll-avs-service/.../model"
+        ],
+        "target_files": [
+          "curaos/backend/services/clinical-doc-service (AVS Composition template)",
+          "curaos/backend/services/reports-service (AVS PDF render)",
+          "curaos/frontend/apps/patient-app (my-AVS view)"
+        ],
+        "required_new": [
+          "AVS Composition template (sections)",
+          "auto-compose on encounter close",
+          "PDF render + patient-app my-AVS"
+        ],
+        "steps": [
+          "1. Define AVS Composition template (demographics, problems, meds, allergies, vitals, results, instructions, education, follow-up, providers) in clinical-doc",
+          "2. Auto-compose on encounter close from patient-experience aggregate",
+          "3. Render PDF via reports-service Gotenberg",
+          "4. Expose patient-app my-AVS (view/download/share); clinician edit-before-release"
+        ],
+        "tests": [
+          "data-aggregation completeness",
+          "PDF render",
+          "i18n section",
+          "portal delivery"
+        ],
+        "migration_notes": "auto-composed from already-captured encounter+orders+meds+education; clinician reviews not re-authors",
+        "license_notes": "avs permissive = port-adapt/verbatim-with-NOTICE",
+        "risk": "low",
+        "no_loss_check": "All AVS sections preserved; clinician edit-before-release retained",
+        "generator_first_target": "contract-typespec (AVS Composition template in clinical-doc)"
+      },
+      {
+        "id": "maternity-vertical",
+        "category": "functional",
+        "area": "healthcare.care maternity overlay vertical",
+        "title": "Maternity/pregnancy care fully absent; richest permissive source available; naturally person-centric journey",
+        "local_evidence": "No maternity entities anywhere; healthstack-careplans-service scaffold-only",
+        "external_evidence": "maternity-tracker (permissive) complete VA model: pregnancy history (19641.13), baby/fetus (19641.112), lactation (19641.04), EDD calc, delivery outcomes, high-risk flagging, patient outreach - already portal-leaning",
+        "best_source": "maternity-tracker (permissive, port-adapt/verbatim-with-NOTICE)",
+        "suggested_mode": "E port-adapt as care-plan vertical",
+        "why": "Self-contained overlay with rich permissive source + naturally person-centric journey (strong lens fit); isolated blast radius",
+        "source_files": [
+          "external-sources/healthcare/.../maternity-tracker/Routines (DSIO* pregnancy/observation/outcome)",
+          "external-sources/healthcare/.../maternity-tracker/Portal"
+        ],
+        "target_files": [
+          "curaos/backend/services/healthstack-careplans-service (maternity vertical) OR new healthstack-maternity-service/specs/<svc>.tsp",
+          "curaos/tools/codegen/src/sdk-emit.ts"
+        ],
+        "required_new": [
+          "maternity contracts (pregnancy episode, fetus, EDD/gestational-age, lactation, delivery outcome, high-risk flag)",
+          "EDD calculator + high-risk eval (CDS hook)",
+          "scheduled flag-eval + outreach via automation-core"
+        ],
+        "steps": [
+          "1. Define maternity contracts as care-plan vertical",
+          "2. Add events",
+          "3. Regenerate SDK",
+          "4. Build service + EDD calc + high-risk eval; model pregnancy as care-plan/journey",
+          "5. Migration + seed; patient-app my-pregnancy journey + OB clinician surface"
+        ],
+        "tests": [
+          "EDD/gestational-age calc",
+          "high-risk flag-eval scheduled",
+          "sensitive-data consent",
+          "CDA author"
+        ],
+        "migration_notes": "pregnancy = care-plan instance driving prenatal visit/screening schedule; sensitive (IPV/depression) extra protection",
+        "license_notes": "maternity-tracker permissive = port-adapt safe",
+        "risk": "medium - L complexity, isolated",
+        "no_loss_check": "Pregnancy history, EDD, fetus/baby, lactation, delivery outcomes, high-risk flags, outreach call log preserved; person gets week-by-week journey",
+        "generator_first_target": "contract-typespec (maternity care-plan vertical)"
+      },
+      {
+        "id": "interop-fhir-server",
+        "category": "functional",
+        "area": "healthcare.interop integration adapters",
+        "title": "FHIR R4 server (full resource provider set) + HL7v2 ADT ingestion + C-CDA exchange absent; interop-service + fhir-client both clean-slate stubs",
+        "local_evidence": "healthstack-interop-service scaffold ('clean slate'); fhir-client package README-only (verified 44B README)",
+        "external_evidence": "openmrs-fhir2 (MPL) 13+ R4 providers + ToFhirTranslator/FromFhirTranslator generic translator-pair framework; fhir-on-vista + vista-fhir-codex (Apache-2.0) bundle dedup, FileMan<->FHIR datetime, resource extraction",
+        "best_source": "openmrs-fhir2 (MPL, pattern-only - translator-pair convention) + vista-fhir-codex/fhir-on-vista (Apache-2.0, copy utilities with NOTICE)",
+        "suggested_mode": "E port-adapt via generator (translator-pair emitter in @curaos/codegen + @curaos/fhir-client base)",
+        "why": "External-EHR/HIE bridge + 'my record' export path; the translator-pair pattern is the single most reusable interop seam, bakeable into the generator so all FHIR-exposing services emit conformant mapping",
+        "source_files": [
+          "external-sources/healthcare/openmrs-org/openmrs-module-fhir2/.../translators/ToFhirTranslator.java",
+          "external-sources/healthcare/openmrs-org/openmrs-module-fhir2/.../translators/PractitionerTranslator.java",
+          "external-sources/healthcare/worldvista/VistA-FHIR-Server-Codex/src/C0FHIR.m"
+        ],
+        "target_files": [
+          "curaos/tools/codegen/templates/service-core/specs/{{kebabCase name}}.tsp.hbs",
+          "curaos/backend/packages/fhir-client (translator base + dedup/datetime utils)",
+          "curaos/backend/services/healthstack-interop-service/specs/healthstack-interop.tsp",
+          "curaos/backend/services/healthstack-interop-service/src/resources"
+        ],
+        "required_new": [
+          "@curaos/fhir-client translator-pair base + reference-translator + datetime/dedup utils",
+          "healthstack-interop.tsp FHIR resource operation set",
+          "codegen emitter scaffolding translator pair + provider per resource",
+          "HL7v2 ADT ingestion (port-adapt)"
+        ],
+        "steps": [
+          "1. Define ToFhir/FromFhir translator-pair convention + reference-translator + datetime/dedup in @curaos/fhir-client (pattern from fhir2 MPL, code from permissive vista)",
+          "2. Author healthstack-interop.tsp FHIR resource set (generator-first)",
+          "3. Add codegen emitter scaffolding translator pair + provider per contract resource",
+          "4. Regenerate interop-service; implement per-resource mapping to domain services",
+          "5. HL7v2 ADT ingestion (port-adapt) emitting normalized FHIR resources as events",
+          "6. FHIR-validate every resource in CI"
+        ],
+        "tests": [
+          "per-resource FHIR-R4 validation",
+          "translator round-trip lossless",
+          "HL7v2 ADT ingest",
+          "bundle dedup + datetime conversion"
+        ],
+        "migration_notes": "patient-compartment scoped to authenticated person via SMART scopes for person 'my record'; multi-patient FHIR server for management; reference-only events",
+        "license_notes": "openmrs-fhir2 MPL = pattern-only no code copy; vista Apache-2.0 = copy utilities with NOTICE",
+        "risk": "high - FHIR conformance breadth; mitigate by driving every resource from contract (checklist-verifiable)",
+        "no_loss_check": "Full R4 resource set, patient compartment, dual R3/R4 versioning, HL7v2 ADT, C-CDA, bundle dedup, FileMan<->FHIR datetime all carried; person 'my record' export + management multi-patient server both delivered",
+        "generator_first_target": "codegen-emitter (translator-pair) + fhir-client package + contract-typespec"
+      },
+      {
+        "id": "ecqm-quality-engine",
+        "category": "functional",
+        "area": "healthcare quality measures + public-health reporting",
+        "title": "eCQM execution engine + QRDA I/III + C-CDA export/validation absent; quality-service scaffold-only",
+        "local_evidence": "healthstack-quality-service NO src (verified); clinical-doc has CDA bridge but no QRDA",
+        "external_evidence": "pophealth + health-data-standards (both Apache-2.0): CQM execution engine, 10 population codes (IPP/DENOM/NUMER/DENEX/DENEXCEP/NUMEX/MSRPOPL/OBSERV/MSRPOPLEX/STRAT), HQMF parser, QRDA Cat I/III + C32 generator + validators",
+        "best_source": "pophealth + health-data-standards (Apache-2.0, copy-verbatim-ok-with-NOTICE)",
+        "suggested_mode": "E port-adapt (TS engine, golden-file vs Ruby reference) + C run-as-background-service (HQMF/QRDA via HDS Ruby behind conversion-core)",
+        "why": "Quality is a v1 healthstack leaf with no implementation; eCQM correctness is regulator-graded; permissive sources are canonical; person care-gap surface derives from same engine",
+        "source_files": [
+          "external-sources/healthcare/worldvista/popHealth/lib/hds/measure.rb",
+          "external-sources/healthcare/worldvista/health-data-standards/lib/hqmf-model/population_criteria.rb",
+          "external-sources/healthcare/worldvista/health-data-standards/lib/hqmf-parser.rb"
+        ],
+        "target_files": [
+          "curaos/backend/services/healthstack-quality-service/specs/healthstack-quality.tsp",
+          "curaos/backend/services/healthstack-quality-service/src/measures",
+          "curaos/backend/services/conversion-core-service (HQMF import + QRDA/C-CDA export jobs)",
+          "curaos/backend/services/clinical-doc-service (store QRDA as DocumentReference)"
+        ],
+        "required_new": [
+          "Measure+PopulationCriteria+MeasureResult+Cohort+Baseline contracts",
+          "TS measure-eval engine (port pophealth/HDS)",
+          "HDS Ruby wrapped as Apache-2.0 background converter behind conversion-core",
+          "golden-file tests vs reference"
+        ],
+        "steps": [
+          "1. Author quality contract (Measure, 10 PopulationCriteria, MeasureResult, Cohort, Baseline)",
+          "2. Regenerate skeleton + SDK",
+          "3. Port population-criteria eval + measure-calc to TS",
+          "4. Wrap HDS hqmf-parser + QRDA/C-CDA gen/validate as background converter behind conversion-core; emit MeasureImported",
+          "5. Subscribe terminology ValueSetUpdated + $expand for value-set binding",
+          "6. Golden-file tests vs pophealth/HDS outputs"
+        ],
+        "tests": [
+          "measure-calc determinism",
+          "all 10 population codes + STRAT + OBSERV",
+          "value-set expand",
+          "QRDA Cat I/III schema",
+          "golden-file vs reference"
+        ],
+        "migration_notes": "same engine -> management population dashboard + person 'my care gaps' card (consent-gated)",
+        "license_notes": "pophealth + HDS Apache-2.0 = copy-verbatim-ok-with-NOTICE; safe to run Ruby lib behind service boundary",
+        "risk": "high - regulatory-graded; mitigate with golden-file tests + HDS reference retained",
+        "no_loss_check": "All 10 population codes, stratification, CV measures, baselines/targets, cohort filtering, QRDA III/Excel reporting carried; provider/practice dashboard retained; person care-gap surface added",
+        "generator_first_target": "contract-typespec + C-mode HDS background converter via conversion-core"
+      },
+      {
+        "id": "erp-accounting-gl",
+        "category": "functional",
+        "area": "erp.accounting general ledger",
+        "title": "accounting-core double-entry GL/CoA/Tax/bank-rec/multi-currency/fiscal-period mostly scaffold; large scaffold-to-real lift; auto-post from already-emitted domain events",
+        "local_evidence": "accounting-core has strong GL spine (balanced journal trigger, audit chain, outbox) but CoA templates, tax-rule engine, bank reconciliation, multi-currency master/rates/FX, fiscal-year/period-close, analytic/cost-center all absent or partial",
+        "external_evidence": "Odoo (LGPL) account.move/move.line/journal/account/tax/analytic/res_currency/bank_statement/reconcile_model; ERPNext (GPL) GL Entry/Fiscal Year; Dolibarr (GPL) bookkeeping",
+        "best_source": "Odoo (LGPL, port-adapt model+logic) - account.move is the double-entry blueprint",
+        "suggested_mode": "E port-adapt + new @curaos/tax-engine + @curaos/currency shared packages",
+        "why": "GL is the posting target for billing/sales/procurement/expense/depreciation; tax legally binding; bank-rec needed to close books; all consumers already emit financial events",
+        "source_files": [
+          "external-sources/erp-business/odoo-org/addons/account/models/account_move.py",
+          "external-sources/erp-business/odoo-org/addons/account/models/account_tax.py",
+          "external-sources/erp-business/odoo-org/addons/account/models/account_bank_statement.py",
+          "external-sources/erp-business/odoo-org/addons/account/models/res_currency.py"
+        ],
+        "target_files": [
+          "curaos/backend/packages/tax-engine (NEW)",
+          "curaos/backend/packages/currency (NEW)",
+          "curaos/backend/services/accounting-core-service/specs/accounting.tsp (Journal/Account/Tax/BankStatement/Currency/FiscalYear/Analytic)",
+          "curaos/backend/services/accounting-core-service/src/events/posting-rules.ts (widen catalog)"
+        ],
+        "required_new": [
+          "@curaos/tax-engine (compound+repartition+withholding)",
+          "@curaos/currency (master+rates+FX gain/loss)",
+          "Journal-definition, CoA templates, BankStatement+ReconcileRule, FiscalYear+period-close, Analytic dimension contracts",
+          "auto-post posting-rules expansion"
+        ],
+        "steps": [
+          "1. Add Journal/Account/Tax/BankStatement/Currency/FiscalYear/Analytic models to accounting.tsp (contract-first)",
+          "2. Build @curaos/tax-engine + @curaos/currency shared packages",
+          "3. Wire sales/commerce/procurement/expense line-compute to tax-engine; FX gain/loss balancing entry",
+          "4. CSV bank import + rule-based auto-match (OFX/CAMT follow-up)",
+          "5. Period-close lock at DB+service level (reject backdated posting)",
+          "6. Widen DEFAULT_POSTING_RULES from source debit/credit conventions; auto-post from emitted events; seed localized CoA templates",
+          "7. Runnable balance checks (invoice==GL AR debit, FX delta balances)"
+        ],
+        "tests": [
+          "double-entry balance invariant",
+          "tax compound+repartition+withholding vectors",
+          "bank-match auto-reconcile",
+          "period-close backdating rejection",
+          "FX settlement balances",
+          "CoA template seed"
+        ],
+        "migration_notes": "money int64 cents; tenant=company via DB-per-tenant (stronger than row company_id); auto-post removes manual journal entry (business simplification)",
+        "license_notes": "Odoo LGPL/ERPNext GPL/Dolibarr GPL = port-adapt model+logic, no verbatim copy",
+        "risk": "high - financial correctness, money paths need test vectors",
+        "no_loss_check": "Double-entry, CoA, journals, tax rules, bank-rec, multi-currency+FX, fiscal-period, intercompany/consolidation, analytic all preserved; person sees derived 'my money' statement",
+        "generator_first_target": "contract-typespec + @curaos/tax-engine + @curaos/currency packages"
+      },
+      {
+        "id": "erp-invoice-subscription-recurring",
+        "category": "functional",
+        "area": "erp.accounting invoicing + recurring/subscriptions/contracts",
+        "title": "Customer invoice lifecycle (line items, state machine, recurring templates, PDF/email), subscription/recurring-billing service, and contract aggregate all stub/absent; donation-core recurrence is the strongest local cadence to promote",
+        "local_evidence": "sales.tsp has only draft-invoice op; no invoice line-item/state-machine/recurring/PDF; no subscription service; no contract entity; donation-core/src/donations/recurrence.ts is the real cadence engine",
+        "external_evidence": "Dolibarr (GPL) Facture (6580 LoC) + FactureRec; Odoo (LGPL) account_move + report_invoice; ERPNext (GPL) Subscription/subscription_plan/process_subscription; frappe AutoRepeat",
+        "best_source": "dolibarr (GPL, model+state-machine port) for invoice; erpnext (GPL) for subscription field model; donation-core recurrence.ts (local, promote outward)",
+        "suggested_mode": "E port-adapt (invoice/subscription/contract) + promote donation cadence to shared @curaos/codegen template",
+        "why": "Invoicing is the AR origination point and biggest finance stub; subscriptions+contracts+renewals all hang off one shared cadence primitive that already exists (donation recurrence) - highest leverage by generalizing",
+        "source_files": [
+          "external-sources/erp-business/dolibarr/htdocs/compta/facture/class/facture.class.php",
+          "external-sources/erp-business/dolibarr/htdocs/compta/facture/class/facture-rec.class.php",
+          "external-sources/erp-business/erpnext/erpnext/accounts/doctype/subscription/subscription.json",
+          "external-sources/erp-business/erpnext/erpnext/accounts/doctype/contract/contract.json",
+          "external-sources/erp-business/dolibarr/htdocs/contrat/class/contrat.class.php"
+        ],
+        "target_files": [
+          "curaos/backend/services/sales-core-service/specs/sales.tsp (Invoice+InvoiceLine+RecurringTemplate)",
+          "curaos/backend/services/subscription-core-service/specs/subscription.tsp (NEW) OR commerce-core extension",
+          "curaos/backend/services/contract-core-service/specs/contract.tsp (NEW)",
+          "curaos/backend/packages/recurring-cadence-helper (extract from donation recurrence.ts)",
+          "curaos/tools/codegen (cadence template/emitter)"
+        ],
+        "required_new": [
+          "Invoice+InvoiceLine+RecurringInvoiceTemplate models + gap-free per-tenant per-fiscal-year numbering",
+          "subscription-core-service (Plan/Subscription) OR commerce-core extension",
+          "contract-core-service (Contract header+lines+lifecycle+signed_status projection)",
+          "shared cadence helper/template from donation recurrence (frequency+next_due_at+BullMQ+month-end clamp)"
+        ],
+        "steps": [
+          "1. Extract donation recurrence.ts into a small shared cadence helper/codegen template (keep minimal, ponytail)",
+          "2. Add Invoice+InvoiceLine+RecurringTemplate to sales.tsp; regenerate sales-sdk; implement state machine + numbering sequence; PDF via storage-sdk, email via notify-sdk",
+          "3. ADR: decide subscription owner (neutral subscription-core recommended); author subscription.tsp (Plan interval+count+trial, Subscription billing-period+days-until-due+cancel-at-period-end); generate; on billing_due -> invoice/charge via commerce Stripe bridge",
+          "4. Author contract.tsp (Contract+ContractLine+lifecycle); delegate signing to esign-core (emit envelope, project signed_status from events)",
+          "5. *.renewal_due event off shared cadence + notify template + esign re-sign",
+          "6. gen:service-seed real DB-backed rows"
+        ],
+        "tests": [
+          "invoice total==sum(lines)+tax; posted==GL AR debit",
+          "recurring generation emits finalized",
+          "subscription proration + cancel mid-cycle",
+          "contract sign->active->renewal e2e",
+          "cadence month-end clamp assert"
+        ],
+        "migration_notes": "money int64 cents; invoice numbering gap-free per-tenant per-fiscal-year (legal); one cadence primitive serves donation+subscription+contract+recurring-invoice; saved payment method reused across all recurring",
+        "license_notes": "dolibarr/erpnext GPL = port-adapt model+state-machine, no verbatim copy; donation recurrence is local (promote freely)",
+        "risk": "high - invoicing XL; numbering correctness; money path",
+        "no_loss_check": "Line items, recurring, numbering, PDF, email, state machine, subscription plans/trials/billing-periods, contract lines/lifecycle/signing all preserved; person sees clean invoice + self-manage subscription + my-agreements + one-tap renew",
+        "generator_first_target": "contract-typespec (invoice/subscription/contract) + shared cadence codegen template"
+      },
+      {
+        "id": "crm-leads-cases-pipeline",
+        "category": "functional",
+        "area": "crm sales pipeline + service cases + activities",
+        "title": "CRM Lead entity + lead conversion absent (pipeline starts at Deal), business-cases-service scaffold-only (no Case), activity timeline absent, inbound email sync absent, free-string stage (no managed pipeline catalog)",
+        "local_evidence": "crm-core crm.dto.ts has only Account/Contact/Deal/MoveDealStage (no Lead/convert); business-cases-service NO src; no activity entity; notify-sdk outbound-only; STAGE_KEY free-string",
+        "external_evidence": "Odoo (LGPL) crm_lead; EspoCRM (GPL) Lead.json + originalLead backref + Case.json + InboundEmail.json; SuiteCRM (AGPL) Cases+business-hours+KB; espo probability-on-stage hook",
+        "best_source": "espocrm (GPL, clean entityDefs) + odoo (LGPL, lost-reason/stage models)",
+        "suggested_mode": "E port-adapt (lead/case/pipeline) + D api-adapter (activities via tasks-sdk+calendar-sdk) + C run-as-background-service (inbound IMAP poller)",
+        "why": "Lead is the missing front of pipeline; cases are a named-but-empty module; activity timeline + email-sync are core CRM expectations; managed stages block forecasting",
+        "source_files": [
+          "external-sources/crm-insurance-broker/espocrm/.../entityDefs/Lead.json",
+          "external-sources/crm-insurance-broker/espocrm/.../entityDefs/Case.json",
+          "external-sources/crm-insurance-broker/espocrm/.../entityDefs/InboundEmail.json",
+          "external-sources/crm-insurance-broker/suitecrm/modules/Cases/vardefs.php",
+          "external-sources/erp-business/odoo/addons/crm/models/crm_lead.py"
+        ],
+        "target_files": [
+          "curaos/backend/services/crm-core-service/specs/crm.tsp (Lead+convert, Pipeline/Stage/LostReason)",
+          "curaos/backend/services/crm-core-service/src/crms/crms.service.ts (convert flow)",
+          "curaos/backend/services/business-cases-service/specs/cases.tsp (NEW full build)",
+          "curaos/backend/packages/tasks-sdk + calendar-sdk (relatesTo for activity timeline)",
+          "curaos/backend/packages/notify-sdk (inbound email poller)"
+        ],
+        "required_new": [
+          "Lead model + convertLead op (dedup against party-core)",
+          "business-cases-service full build via service-business codegen (case_number/status/priority/SLA/escalation/KB)",
+          "relatesTo field on tasks-sdk+calendar-sdk + CRM timeline read",
+          "inbound IMAP poller background service",
+          "managed Pipeline/Stage/LostReason catalog (replace free-string)"
+        ],
+        "steps": [
+          "1. Add Lead+convertLead to crm.tsp; convert dedups against party-core, creates contact+account+opportunity, emits lead.converted",
+          "2. Author cases.tsp; generate full business-cases-service via service-business template (CRUD+events+audit+outbox); SLA via business hours + escalation",
+          "3. Add relatesTo (entity-type+id) to tasks-sdk+calendar-sdk; CRM timeline assembled by query (no parallel activity entities)",
+          "4. Inbound email: asyncapi email-received event + tracked background poller auto-matching from/to to contact/case; outbound via notify-sdk",
+          "5. Add Pipeline/Stage/LostReason models; migrate STAGE_KEY to managed ref; auto-derive probability from stage",
+          "6. gen:service-seed real demo leads/cases/activities"
+        ],
+        "tests": [
+          "lead convert + dedup",
+          "case SLA escalation",
+          "activity timeline cross-service join",
+          "inbound email idempotent match",
+          "stage probability auto-derive"
+        ],
+        "migration_notes": "party-anchored (no duplicate contacts); reuse tasks-core Task for activities (no parallel call/meeting/email types); support-agent role already exists",
+        "license_notes": "espocrm AGPL/suitecrm AGPL/odoo LGPL = port-adapt data model only (facts), no code copy",
+        "risk": "medium",
+        "no_loss_check": "Lead source/status/lost-reason/conversion, case_number/priority/escalation/business-hours/KB, activities (tasks/calls/meetings/notes), inbound email, managed stages all preserved; person sees relationship next-actions + my-cases + secure inbox",
+        "generator_first_target": "contract-typespec (lead/case/pipeline) + service-business codegen for cases + sdk relatesTo"
+      },
+      {
+        "id": "insurance-policy-domain",
+        "category": "functional",
+        "area": "crm-insurance-broker policy lifecycle",
+        "title": "Entire insurance policy domain net-new: Policy+coverage-lines+terms/renewals+endorsements+beneficiaries+premium-schedule+commission-engine+broker-claim+KYC all absent (zero local owner)",
+        "local_evidence": "No policy/insurance/carrier/premium/endorsement/beneficiary entity in inventory; sales-core commission is a stub; business-cases-service scaffold",
+        "external_evidence": "SuiteCRM (AGPL) AOS_Contracts+AOS_Line_Item_Groups+AOS_Invoices (policy substrate); Dolibarr (GPL) contrat/contratligne (lifecycle); OpenEMR (GPL) Claim.php (broker-claim status); EspoCRM (GPL) custom-entity pattern",
+        "best_source": "SuiteCRM AOS_Contracts (data shape, AGPL reference) + Dolibarr contrat (lifecycle, GPL port-adapt) - clean-room model port",
+        "suggested_mode": "E port-adapt as NEW policy-core + business-insurance + personal-insurance triad via generator",
+        "why": "Insurance-broker is a net-new domain; policy is the spine all other features FK; must enter generator-first as new domain",
+        "source_files": [
+          "external-sources/crm-insurance-broker/suitecrm/modules/AOS_Contracts/vardefs.php",
+          "external-sources/crm-insurance-broker/suitecrm/modules/AOS_Line_Item_Groups/",
+          "external-sources/erp-business/dolibarr/htdocs/contrat/class/contrat.class.php",
+          "external-sources/erp-business/dolibarr/htdocs/contrat/class/contratligne.class.php"
+        ],
+        "target_files": [
+          "curaos/tools/codegen (3-layer emit + .tsp template)",
+          "curaos/backend/contracts/insurance/policy.tsp (NEW)",
+          "curaos/backend/services/policy-core-service (NEW generator-emitted)",
+          "curaos/backend/packages/insurance-sdk (NEW)"
+        ],
+        "required_new": [
+          "policy.tsp (Policy, CoverageLine, PolicyTerm, Endorsement, Beneficiary, Carrier-ref) + lifecycle state-machine + 100%-beneficiary-sum + premium validators",
+          "commission engine (splits, multi-level override, clawback)",
+          "broker-claim (FNOL, lifecycle, adjuster, reserves)",
+          "KYC/AML flow (reuse identity+documents+workflow+integrations AML adapter)",
+          "premium-schedule/installments via accounting-core"
+        ],
+        "steps": [
+          "1. Author policy domain .tsp (Policy header+coverage-lines+term+endorsement+beneficiary+carrier-ref) - generator-first",
+          "2. Run @curaos/codegen 3-layer emit -> policy-core + business-insurance + personal-insurance overlays + insurance-sdk + Helm + gateway route + ai-mirror docs",
+          "3. drizzle schema + migration + gen:service-seed real policies",
+          "4. Wire carrier/beneficiary/producer to party-core composite-FK; reuse sales-core line-item template; delegate signing to esign-core; premium installments to accounting-core",
+          "5. Commission engine as custom state machine (splits/override cascade up org-core hierarchy, clawback)",
+          "6. Broker-claim on business-cases spine + FNOL workflow; KYC via workflow-core + integrations-core AML adapter",
+          "7. Fold term/pro-rata/sum edge cases into generator validators"
+        ],
+        "tests": [
+          "100%-beneficiary-sum validator",
+          "premium installment billing",
+          "renewal automation",
+          "commission split/override/clawback calc",
+          "FNOL->settlement e2e",
+          "KYC AML gate"
+        ],
+        "migration_notes": "PHI/PII (member, beneficiary) in healthstack/overlay schema; party-anchored carrier/producer/beneficiary; money int64; insurance Policy = Contract/Coverage analog",
+        "license_notes": "SuiteCRM AGPL = reference-only data shape; Dolibarr GPL = port-adapt clean-room; OpenEMR GPL = X12/status logic only",
+        "risk": "high - net-new domain, large surface, money + commission paths",
+        "no_loss_check": "Policy header+lines+lifecycle+endorsements+commissions+splits+carrier+installments+beneficiaries+claims+KYC all preserved on broker management surface; policyholder gets coverage summary + one-tap renew + claim tracking + self-KYC",
+        "generator_first_target": "contract-typespec (policy domain) + 3-layer codegen emit + @curaos/insurance-sdk"
+      },
+      {
+        "id": "ui-kit-archetypes",
+        "category": "functional",
+        "area": "UI screens + ui-kit components + generator",
+        "title": "ui-kit (26 components) lacks the cross-cutting archetypes the corpus demands: KanbanBoard, CalendarBoard/SchedulingBoard, Wizard/Stepper, RecordChart/Entity360, ApprovalInbox, WorkflowCanvas, FilterBar/SearchShell, Ledger/BillingFlow, ChecklistPanel, MapView, TimelineFeed, ReportViewer, ConsentCard, EmptyState; ui-app-emit infers ONE generic CRUD screen per service + single org-shaped surface",
+        "local_evidence": "ui-app-emit screenForService() emits DataTable list + Drawer detail/form + persona dashboard only; rich archetypes only exist as bespoke screens in 10 more-complete apps; apps single-surface and org-shaped; patient-app/clinician-app scaffold-only",
+        "external_evidence": "11 kanban screens (Odoo/ERPNext/EspoCRM pipelines), 6+ calendars, wizards (OpenEMR/AVS/COMS), patient-chart-360 (OpenMRS/OpenEMR/ehmp/Bahmni), approval (Windmill/Activepieces), 90 grid screens with faceted search, billing forms across 5 systems, surgery checklists, fleet/geo, activity streams",
+        "best_source": "permissive sources (node-red/activepieces canvas patterns, ehmp CoverSheet/UserDefinedScreens MIT, vista-dashboard-rules Apache-2.0) for patterns; build domain-neutral in @curaos/ui",
+        "suggested_mode": "E port-adapt (build in @curaos/ui) + generator archetype vocabulary in ui-app-emit",
+        "why": "Every list/detail/journey screen across all domains needs these; building once in ui-kit + emitting from generator means both generated output and bespoke screens consume one source, and unlocks the dual person/management surface",
+        "source_files": [
+          "node-red/.../editor-client (canvas)",
+          "external-sources/healthcare/vhainnovations/ehmp-app/api/UserDefinedScreens.js",
+          "external-sources/erp-business/odoo-org/addons/project (kanban)",
+          "external-sources/healthcare/vhainnovations/AVS/.../Wizard.js"
+        ],
+        "target_files": [
+          "curaos/frontend/packages/ui (NEW components: KanbanBoard, CalendarBoard, Wizard, RecordChart, ApprovalInbox, WorkflowCanvas, FilterBar, Ledger, ChecklistPanel, MapView, TimelineFeed, ReportViewer, ConsentCard, EmptyState, FileUpload, DocViewer)",
+          "curaos/tools/codegen/src/ui-app-emit.ts (archetype vocabulary + dual surface + journey shell)",
+          "curaos/tools/codegen/src/ui-app-native-emit.ts (real data-bound patient-app/clinician-app screens)"
+        ],
+        "required_new": [
+          "16 domain-neutral ui-kit components",
+          "ui-app-emit screen archetype hint vocabulary (kanban/calendar/wizard/workflow-canvas/approval-inbox/record-chart/ledger/timeline/search-shell/checklist/map/kpi-grid)",
+          "surface: person|management emission + journey shell variant",
+          "DASHBOARD_PERSONAS person-variant panel sets",
+          "ui-app-native-emit real mobile screens",
+          "contract lint: archetype needing search endpoint fails generation if service contract lacks one"
+        ],
+        "steps": [
+          "1. Build the 16 components in @curaos/ui (a11y: keyboard reorder/grid roles/tabpanel/feed-role/RTL/i18n)",
+          "2. Add archetype vocabulary to ui-app-emit keyed off contract shape + per-screen archetype hint",
+          "3. Add surface:person|management generator param emitting journey shell (timeline/card-first/mobile) + admin shell from one contract+SDK",
+          "4. Wire DASHBOARD_PERSONAS to person vs management panel sets",
+          "5. ui-app-native-emit real data-bound patient-app/clinician-app screens from same SDK hooks",
+          "6. Contract lint preventing search-shell over missing route"
+        ],
+        "tests": [
+          "component a11y (axe) per archetype",
+          "generator emits dual surface from one contract",
+          "archetype-binding lint catches missing endpoint",
+          "native screens data-bound (not placeholder)"
+        ],
+        "migration_notes": "both surfaces share SDK hooks + entity schema; person never sees wires/8-tabs; management keeps full control; future apps auto-covered by generator",
+        "license_notes": "build domain-neutral in-house; patterns from permissive sources (MIT/Apache) only; AGPL editors (windmill/suitecrm) reference-only",
+        "risk": "medium - large component surface but high reuse leverage",
+        "no_loss_check": "All management archetypes (full graph canvas, advanced facets+saved-views, revenue-cycle editor, multi-resource scheduling, all chart tabs) preserved on management surface; person surfaces additive",
+        "generator_first_target": "ui-kit components + ui-app-emit/ui-app-native-emit archetype + dual-surface emission"
+      },
+      {
+        "id": "workflow-automation-primitives",
+        "category": "functional",
+        "area": "workflow-automation reusable primitives + AI/MCP/connector",
+        "title": "Missing reusable workflow primitives (human-approval step, escalation ladder, retry/error policy, scheduled-job-with-handler-chain, webhook/form trigger), AI/LLM agent step + MCP tooling, live connector registry (fixture only), expression engine, test/dry-run mode, multi-language code step, secrets contract",
+        "local_evidence": "workflow-core BPM real but approval/escalation/retry not surfaced as reusable primitives; automation-core connector-catalogue is a FIXTURE (no live registry); no AI step/MCP (grep zero); no expression engine; workflow-designer has no test/preview; plugin-runtime sandbox has no code-step; no Secret/Variable contract entity",
+        "external_evidence": "Activepieces (permissive) createPiece/AgentToolType/McpServer/pause-resume/test-step; Windmill (AGPL) schedule/approval/concurrency/secret-backend (pattern only); n8n (source-available) WorkflowExpression/pin-data (reference); Frappe (MIT) AutoRepeat/AssignmentRule/WorkflowTransition; node-red (permissive) registry/catch",
+        "best_source": "activepieces (permissive, port createPiece + agent/MCP + pause-resume) + frappe (MIT, AutoRepeat/AssignmentRule) + node-red (permissive, registry/catch); windmill/n8n pattern-only",
+        "suggested_mode": "E port-adapt into workflow-core/automation-core + new @curaos/connector-sdk; G pattern-reference-only for AGPL windmill",
+        "why": "Connectors are the heart of automation but are a static fixture (highest-leverage gap); AI orchestration is strategic + absent; reusable primitives remove duplicate per-service code per generator-evolution",
+        "source_files": [
+          "activepieces/packages/core/piece-types/src/lib/piece.ts",
+          "activepieces/packages/core/piece-types/src/lib/agents.ts",
+          "activepieces/packages/core/shared/src/lib/automation/mcp/mcp.ts",
+          "frappe/automation/doctype/auto_repeat/auto_repeat.py",
+          "node-red/.../@node-red/registry/lib/registry.js"
+        ],
+        "target_files": [
+          "curaos/backend/packages/connector-sdk (NEW)",
+          "curaos/backend/services/automation-core-service/specs/automation.tsp (AiAgentStep, McpServer, Secret/Variable, ConcurrencySettings, ExpressionBinding, CodeStep)",
+          "curaos/backend/services/workflow-core-service/specs/workflow.tsp (Preview run-kind, FormTrigger binding)",
+          "curaos/tools/codegen (connector SDK recipe + reusable primitive emitters)"
+        ],
+        "required_new": [
+          "@curaos/connector-sdk (createPiece pattern: ConnectorAction+ConnectorAuth) replacing fixture",
+          "AiAgentStep + AgentTool union (piece/flow/mcp/knowledge-base) routed through plugin-runtime sandbox + Presidio + Langfuse",
+          "McpServer/McpToolDefinition entity",
+          "Secret/Variable contract (encrypted DB backend default)",
+          "reusable human-approval step + escalation-ladder + retry/error + scheduled-job-with-handler-chain + webhook/form-trigger primitives in codegen",
+          "expression-binding (sandboxed) + CodeStep (plugin-runtime) + Preview/dry-run + concurrency/debounce"
+        ],
+        "steps": [
+          "1. Define Connector+ConnectorAction+ConnectorAuth in @curaos/connector-sdk via SDK recipe; unify with integrations-core framework+OAuth vault; promote fixture entries to DB-registered via gen:service-seed",
+          "2. Add AiAgentStep+AgentTool to automation.tsp; route tool calls through connector catalog + plugin-runtime sandbox; LiteLLM gateway + Langfuse + Presidio PHI scrub",
+          "3. Add McpServer entity (PLATFORM/PROJECT, token, disabledTools); expose connectors/flows as MCP tools, RBAC-gated",
+          "4. Add Secret/Variable contract (AES256GCM + workspace key, k8s secrets); steps reference by path never inline",
+          "5. Add reusable primitives to codegen templates so every service inherits: human-approval (windmill Approval Decision Loop pattern), escalation-ladder (aware/erpnext SLA), retry/error (activepieces/node-red catch), scheduled-job-handler-chain (windmill schedule), webhook/form-trigger (activepieces/n8n)",
+          "6. Add ExpressionBinding (sandboxed JS, no require/import) + CodeStep (plugin-runtime) + Preview run-kind/pin-data + ConcurrencySettings/DebouncingSettings"
+        ],
+        "tests": [
+          "connector live-registry round-trip",
+          "AI step PII-redaction + low-confidence->human-review + eval-threshold gate + prompt-injection guard",
+          "MCP token scoping",
+          "secret never logged + encrypted",
+          "escalation ladder timer + retry backoff/DLQ",
+          "expression sandbox blocks require",
+          "dry-run no side-effects"
+        ],
+        "migration_notes": "PHI never to external LLM without consent (Presidio); concurrency/debounce protects person from duplicate runs; one cadence/scheduling primitive (donation pattern) reused; secrets self-hosted DB+key default",
+        "license_notes": "activepieces/node-red permissive = port-adapt; frappe MIT = pattern copyable; windmill AGPL + n8n source-available = pattern-reference-only",
+        "risk": "medium-high - AI/secrets/code-step are trust boundaries (do not simplify isolation/encryption)",
+        "no_loss_check": "Full connector framework, AI agent+tools+KB, MCP, secrets backends, approval conditions, escalation, retry/DLQ, concurrency, expressions, code steps, dry-run all preserved; person sees recipe templates + my-connections + my-runs + 'waiting on you' inbox",
+        "generator_first_target": "@curaos/connector-sdk + contract-typespec (AI/MCP/secret/expression/codestep) + reusable primitive codegen emitters"
+      },
+      {
+        "id": "erp-trade-supply-gaps",
+        "category": "functional",
+        "area": "erp.trade + erp.supply",
+        "title": "Conditional pricing engine (no PriceRule entity), order fulfillment chain (pick/pack/ship + stock-deduction-on-ship), durable sales quote/order persistence (InMemory map fallback), stock reservation + valuation (no available-to-promise/FIFO cost), POS",
+        "local_evidence": "commerce-core drizzle has only base+audit tables (no price-rule); sales-store.ts uses InMemoryStore Map for quotes/orders; business-shop fulfillOrder but no pick-list/delivery-note; inventory-core has movement ledger but no reserved-qty/cost; no POS",
+        "external_evidence": "ERPNext (GPL) pricing_rule (apply_pricing_rule, qty/amount/validity/customer-group), pick_list/delivery_note, Stock Ledger valuation; Odoo (LGPL) stock_picking, stock_quant reserved_quantity",
+        "best_source": "erpnext pricing_rule (GPL, port resolution algorithm) + odoo stock (LGPL, picking/quant)",
+        "suggested_mode": "E port-adapt",
+        "why": "Pricing affects every quote/cart/POS line; fulfillment closes order->ship gap; durable persistence blocks live use; reservation prevents overselling",
+        "source_files": [
+          "external-sources/erp-business/erpnext/erpnext/accounts/doctype/pricing_rule/utils.py",
+          "external-sources/erp-business/odoo-org/addons/stock/models/stock_picking.py",
+          "external-sources/erp-business/odoo-org/addons/stock/models/stock_quant.py",
+          "external-sources/erp-business/erpnext/erpnext/selling/doctype/sales_order/sales_order.py"
+        ],
+        "target_files": [
+          "curaos/backend/services/commerce-core-service/specs/commerce.tsp (PriceRule+PriceResult)",
+          "curaos/backend/services/commerce-core-service/drizzle/schema.ts (price_rule table)",
+          "curaos/backend/services/sales-core-service/drizzle/schema.ts (real quote/order/invoice tables)",
+          "curaos/backend/services/inventory-core-service/specs/inventory.tsp (reserve/valuation + pick/ship)"
+        ],
+        "required_new": [
+          "PriceRule+PriceResult models + resolution (priority/overlap)",
+          "fulfillment states + derived pick list + ship-confirm op (atomic stock deduction)",
+          "durable sales_quote/order/invoice/commission drizzle tables (Postgres default; InMemory tests only)",
+          "reserve/unreserve + reservation ledger + valuation (FIFO/moving-avg) + available-to-promise"
+        ],
+        "steps": [
+          "1. Add PriceRule+PriceResult to commerce.tsp; port ERPNext apply_pricing_rule priority/overlap as fresh TS; sales+cart call commerce price resolution; rule-priority test mirroring ERPNext",
+          "2. Add fulfillment states to shop.tsp + derived pick list; ship-confirm op in inventory.tsp booking atomic issue per line; emit event for fleet last-mile",
+          "3. Add sales_quote/order/invoice/commission drizzle tables; make Postgres the default SalesStore (InMemory unit-tests only); gen:service-seed; PG integration test across restart (fixes data-truth)",
+          "4. Add reserve/unreserve ops + reservation ledger + valuation fields/cost-layer; expose available-to-promise to personal-shop badge"
+        ],
+        "tests": [
+          "pricing-rule priority/overlap vs ERPNext cases",
+          "pick->pack->ship stock deduction transactional",
+          "sales persists across restart",
+          "reservation lifecycle + valuation methods"
+        ],
+        "migration_notes": "money int64 cents; person sees final price + discount badge + availability; management keeps full rule editor + valuation",
+        "license_notes": "erpnext GPL/odoo LGPL = port logic+model, no verbatim copy",
+        "risk": "medium - money + stock-accuracy paths",
+        "no_loss_check": "Conditional pricing scope/breaks/validity/discount-types, pick/pack/delivery/backorder, quote lifecycle, reservation+valuation all preserved; person gets right price + tracking + accurate availability",
+        "generator_first_target": "contract-typespec (price-rule/fulfillment/reservation) + durable drizzle + service-seed"
+      },
+      {
+        "id": "erp-delivery-people-gaps",
+        "category": "functional",
+        "area": "erp.delivery + erp.people",
+        "title": "Project/milestone/stage envelope (business-projects scaffold), expense-core (absent), fixed-asset depreciation (fleet has generic Asset, no depreciation/capitalization/movement), leave accrual depth, timesheet billable/costing, attendance clock-in/out",
+        "local_evidence": "business-projects-service NO src; no expense service; fleet-core Asset+MaintenanceSchedule but no depreciation/movement; hr-core LeaveRequest+TimeEntry but no leave-type/accrual or billable/costing; no attendance",
+        "external_evidence": "Odoo (LGPL) project/milestone/task_type, hr_expense, hr_holidays accrual, hr_timesheet, hr_attendance; ERPNext (GPL) project_template, Asset Depreciation Schedule/Movement",
+        "best_source": "odoo (LGPL, project/expense/leave/timesheet/attendance) + erpnext (GPL, asset depreciation)",
+        "suggested_mode": "E port-adapt (extend hr-core/fleet-core primitives + new expense-core)",
+        "why": "PM envelope is central delivery gap; expense is named taxonomy leaf with zero owner; fixed-asset financial lifecycle missing; leave accrual is compliance-critical; timesheet billable is project-delivery value",
+        "source_files": [
+          "external-sources/erp-business/odoo-org/odoo/addons/project/models/project_project.py",
+          "external-sources/erp-business/odoo-org/odoo/addons/hr_expense/models/hr_expense.py",
+          "external-sources/erp-business/odoo-org/odoo/addons/hr_holidays/models/hr_leave_accrual_plan.py",
+          "external-sources/erp-business/erpnext/erpnext/assets/doctype/asset_depreciation_schedule/asset_depreciation_schedule.json"
+        ],
+        "target_files": [
+          "curaos/backend/services/business-projects-service/specs/projects.tsp (NEW Project/Milestone/Stage/Template)",
+          "curaos/backend/services/expense-core-service/specs/expense.tsp (NEW)",
+          "curaos/backend/services/fleet-core-service/specs OR new asset-core (depreciation/capitalization/movement)",
+          "curaos/backend/services/hr-core-service/specs/hr.tsp (LeaveType/Allocation/AccrualPlan, TimeEntry billable/costing, Attendance)"
+        ],
+        "required_new": [
+          "business-projects-service full build (Project/Milestone/Stage/Template; tasks-core remains single Task owner)",
+          "expense-core-service (ExpenseClaim/Line/Category; delegate GL posting to accounting-core)",
+          "fixed-asset depreciation/capitalization/movement/custody (extend fleet Asset or asset-core; depreciation posts to accounting-core)",
+          "hr LeaveType/Allocation/AccrualPlan + TimeEntry billable/costing/project-ref + Attendance clock-in/out"
+        ],
+        "steps": [
+          "1. Author projects.tsp (Project/Milestone/Stage/ProjectTemplate, link tasks via tasks-core ref); generate full service; tasks-core stays single Task entity owner (no parallel store)",
+          "2. Author expense.tsp; generate expense-core; delegate journal posting to accounting-core (single GL owner); receipts via storage; approval via workflow-core",
+          "3. Decide asset owner (extend fleet Asset vs asset-core); add DepreciationSchedule/Capitalization/Movement/custody; depreciation posts to accounting-core",
+          "4. Extend hr.tsp with LeaveType/Allocation/AccrualPlan + balance read; port Odoo accrual math; add TimeEntry billable/costingRate/projectRef; add Attendance (TimeEntry kind or model); business-projects aggregates billable rollup"
+        ],
+        "tests": [
+          "project/milestone/stage CRUD",
+          "expense claim->approval->GL post",
+          "depreciation schedule calc",
+          "leave accrual/balance math",
+          "timesheet billable->invoice rollup",
+          "attendance clock + overtime"
+        ],
+        "migration_notes": "no PII in HR (party-anchored); accounting delegated (no duplicate ledger); one Task aggregate serves clinical+business; payroll filed forward (jurisdiction-heavy, no corpus source)",
+        "license_notes": "odoo LGPL/erpnext GPL = port model+logic, no verbatim copy",
+        "risk": "medium - accrual/depreciation math, GL delegation discipline",
+        "no_loss_check": "PM envelope, expense+GL+tax+mileage+billable, depreciation/capitalization/movement/disposal, leave accrual/allocation, timesheet billable/costing, attendance/overtime all preserved; person gets my-tasks/my-week/my-leave/my-expenses/my-custody self-service",
+        "generator_first_target": "contract-typespec (projects/expense/asset/hr-extensions) + service-business/personal codegen"
+      },
+      {
+        "id": "platform-reporting-builder",
+        "category": "functional",
+        "area": "platform reports/dashboards + per-user layouts + notification templates",
+        "title": "Self-serve ad-hoc report/query builder (reports-service is PDF+scheduled+Superset-embed only, no first-party report-definition engine), per-user saved dashboard layout, email/SMS template authoring UI",
+        "local_evidence": "reports-service has Gotenberg PDF + scheduled jobs + Superset embed but no report-definition/field/group/chart builder; builder-core has surfaces but no dashboard-layout surface type; notify-service multi-channel+SSE but no template authoring",
+        "external_evidence": "SuiteCRM (AGPL) AOR_Reports; Frappe (MIT) report.py/query_report; ehmp (MIT) UserDefinedScreens; Odoo (LGPL) mail-template",
+        "best_source": "Frappe (MIT, port report-definition schema) + ehmp (MIT, user-screen model) + Odoo (LGPL, mail-template model)",
+        "suggested_mode": "E port-adapt onto existing reports/builder/notify services",
+        "why": "Management cannot define own reports as first-party saved objects; person dashboard layout + notification templates are management self-service gaps",
+        "source_files": [
+          "frappe/core/doctype/report/report.py",
+          "external-sources/healthcare/vhainnovations/ehmp-app/api/UserDefinedScreens.js",
+          "external-sources/erp-business/odoo (Mail & Notifications)"
+        ],
+        "target_files": [
+          "curaos/backend/services/reports-service/specs (ReportDefinition contract)",
+          "curaos/backend/packages/reports-sdk",
+          "curaos/backend/services/builder-core-service/src/surfaces (dashboard surface type + SavedLayout)",
+          "curaos/backend/services/notify-service (NotificationTemplate)"
+        ],
+        "required_new": [
+          "ReportDefinition entity (source-entity ref, fields from contract catalog, group-by, filter, chart, schedule)",
+          "dashboard/workspace surface type + per-user SavedLayout (tenant_id,user_id)",
+          "NotificationTemplate (channel/locale/subject/body-tokens/category)",
+          "field catalog driven from @curaos/contracts entity definitions (generator closure)"
+        ],
+        "steps": [
+          "1. Define ReportDefinition in contracts; field catalog from contract entity definitions (closes generator gap so builder lists real typed fields); regenerate reports-sdk; CRUD+run feeding Gotenberg/Superset; gen:service-seed sample reports; person-scoped + admin-scoped via RBAC",
+          "2. Add dashboard surface type to builder + SavedLayout entity; builder-studio drag-drop; person renders saved layout",
+          "3. Add NotificationTemplate to notify; render-with-variables; admin authoring + i18n locale variants; seed defaults"
+        ],
+        "tests": [
+          "report run from definition",
+          "field-catalog-from-contract lint",
+          "per-user layout save/render",
+          "template render with variables + locale"
+        ],
+        "migration_notes": "person 'my overview' KPI home vs management report runner from one reports service; person dashboard layout vs management templates",
+        "license_notes": "Frappe/ehmp MIT = copyable with attribution; SuiteCRM AGPL = reference-only; Odoo LGPL = port model",
+        "risk": "low-medium - scope creep into full BI (Superset already covers dashboards)",
+        "no_loss_check": "Field select/group/filter/chart/scheduled delivery, per-user layout, template authoring+variables+locale all preserved; person gets simple my-overview + adaptive forms",
+        "generator_first_target": "contract-typespec (ReportDefinition/SavedLayout/NotificationTemplate) + field-catalog-from-contracts generator closure"
+      }
+    ],
+    "quality_gaps": [
+      {
+        "id": "data-truth-in-memory-stores",
+        "category": "quality",
+        "area": "persistence / demo-data rule",
+        "title": "Multiple real-working services persist to in-memory Map instead of Postgres, violating curaos-demo-sample-data-rule (demo/runtime data must be DB-backed)",
+        "local_evidence": "healthstack-billing-service/src/healthstack-billings/billing.repository.ts uses new Map() for invoices/estimates/payments/claims/copays (verified, comment says drizzle 'next step'); crosswalk flags healthstack-patient admission-saga FK, healthstack-messaging thread store, sales-core quote/order store also in-memory",
+        "external_evidence": "n/a (local quality debt) - all source ERPs persist to real tables (Odoo account.move, ERPNext Sales Order)",
+        "best_source": "n/a",
+        "suggested_mode": "E port-adapt (own drizzle schema)",
+        "why": "In-memory stores lose data on restart, cannot scale, and the demo data plane is not DB-backed (rule violation); blocks live use of billing/claims/sales/patient/messaging",
+        "source_files": [
+          "curaos/backend/services/healthstack-billing-service/src/healthstack-billings/billing.repository.ts"
+        ],
+        "target_files": [
+          "curaos/backend/services/healthstack-billing-service/drizzle/schema.ts",
+          "curaos/backend/services/sales-core-service/drizzle/schema.ts",
+          "curaos/backend/services/healthstack-patient-service/src/admission",
+          "curaos/backend/services/healthstack-messaging-service"
+        ],
+        "required_new": [
+          "drizzle schemas + migrations for billing/sales/patient-saga/messaging",
+          "Postgres-backed stores as default (InMemory only for unit tests)",
+          "gen:service-seed for DB-backed demo data"
+        ],
+        "steps": [
+          "1. Author drizzle schema per service from existing .tsp models",
+          "2. Make Postgres store the default; keep InMemory for unit tests only",
+          "3. Add migration + gen:service-seed (DB-backed demo, no API mocks)",
+          "4. PG integration test proving persistence across restart"
+        ],
+        "tests": [
+          "PG integration: data persists across restart",
+          "seed produces DB-backed demo rows",
+          "no Map() default in production path"
+        ],
+        "migration_notes": "this is a blocker for billing/claims/X12 work; do FIRST before the revenue-cycle build",
+        "license_notes": "n/a",
+        "risk": "medium - financial data correctness",
+        "no_loss_check": "All existing domain capability preserved; hardens persistence, removes nothing",
+        "generator_first_target": "drizzle schema + service-seed-emit (already in codegen)"
+      },
+      {
+        "id": "asyncapi-domain-event-richness",
+        "category": "quality",
+        "area": "generator / event contracts",
+        "title": "Codegen emits scaffold .asyncapi.yaml (mold ships {{kebabCase name}}.asyncapi.yaml.hbs) but per-domain event schemas are hand-curated, not generated from the entity model; DOMAIN_ROUTE_MAP also hand-curated not auto-discovered",
+        "local_evidence": "codegen mold has .asyncapi.yaml.hbs (verified) but only carries probe-level events; real services hand-write domain events; crosswalk migration_notes flags AsyncAPI auto-gen gap + DOMAIN_ROUTE_MAP hand-curation",
+        "external_evidence": "n/a (generator quality)",
+        "best_source": "n/a",
+        "suggested_mode": "E port-adapt (extend codegen)",
+        "why": "Event contract drift; reference-only outbox-relayed seq-dedup events should be generated from entity model so every new entity gets its CRUD events automatically",
+        "source_files": [
+          "curaos/tools/codegen/templates/service-core/specs/{{kebabCase name}}.asyncapi.yaml.hbs",
+          "curaos/tools/codegen/src/sdk-emit.ts"
+        ],
+        "target_files": [
+          "curaos/tools/codegen/src (AsyncAPI domain-event emitter)",
+          "curaos/tools/codegen (DOMAIN_ROUTE_MAP auto-discovery from contracts)"
+        ],
+        "required_new": [
+          "AsyncAPI domain-event emission from entity model (curaos.<layer>.<domain>.<entity>.<event>.vN)",
+          "DOMAIN_ROUTE_MAP auto-discovery from contracts"
+        ],
+        "steps": [
+          "1. Add AsyncAPI domain-event emitter generating per-entity CRUD events (reference-only, outbox-relayed, seq-dedup) from the .tsp entity model",
+          "2. Auto-discover DOMAIN_ROUTE_MAP from contract operation set"
+        ],
+        "tests": [
+          "generated events match entity model",
+          "route map matches contract operations"
+        ],
+        "migration_notes": "reference-only envelopes (no PHI); versioned topic naming preserved",
+        "license_notes": "n/a",
+        "risk": "low",
+        "no_loss_check": "hand-curated events become generated; nothing dropped",
+        "generator_first_target": "codegen-emitter (AsyncAPI + route-map auto-discovery)"
+      },
+      {
+        "id": "weaker-than-source-enrichments",
+        "category": "quality",
+        "area": "completeness enrichment of real-working services",
+        "title": "Several real-working services are missing depth the (often weaker overall) sources still encode: terminology measure-binding, clinical-doc QRDA/C-CDA, conversion-core converter jobs, party-core completeness, crm-core multi-method contacts, sales-core quote validity/revisions, inventory FEFO/expiry-alerts, posting-rule catalog breadth, COA templates, search FHIR-param mapping, field-level permissions",
+        "local_evidence": "crosswalk enrichment rows: terminology lacks measure-binding linkage; clinical-doc CDA bridge lacks QRDA/C-CDA produce; conversion-core lacks HQMF/QRDA converter jobs; party-core thin; crm-core Account/Contact displayName-only; sales-core quote no validity-window; inventory lot has no FEFO; posting-rules narrow; no COA templates; search no FHIR-param; RBAC no field-level",
+        "external_evidence": "pophealth/HDS (Apache-2.0) measure-binding+QRDA; Odoo res.partner completeness; ERPNext multi-method contacts; Dolibarr productbatch FEFO; Frappe field-level permissions; openmrs-fhir2 FHIR search params",
+        "best_source": "per-row: Apache-2.0 (pophealth/HDS), Frappe MIT (field-level perms), permissive vista (FHIR search)",
+        "suggested_mode": "E port-adapt (enrich) + G pattern-reference-only",
+        "why": "These are completeness deltas on strong local foundations; cheap incremental enrichment closing no-loss gaps vs source",
+        "source_files": [
+          "external-sources/healthcare/worldvista/health-data-standards/lib/hqmf-model/data_criteria.rb",
+          "frappe (Field-Level Permissions)",
+          "external-sources/healthcare/openmrs-fhir2 (FHIR Search Specification)",
+          "external-sources/erp-business/dolibarr/htdocs/product/class/productbatch.class.php"
+        ],
+        "target_files": [
+          "curaos/backend/services/terminology-service (measure-binding metadata on ValueSet)",
+          "curaos/backend/services/clinical-doc-service (QRDA/C-CDA produce/consume)",
+          "curaos/backend/services/conversion-core-service (HQMF/QRDA converter jobs)",
+          "curaos/backend/services/inventory-core-service (FEFO + expiry-alert events)",
+          "curaos/backend/services/search-service (FHIR search-param mapping)"
+        ],
+        "required_new": [
+          "measure-binding tag on ValueSet expansion + ValueSetUpdated",
+          "QRDA/C-CDA on clinical-doc CDA bridge + store as DocumentReference",
+          "HQMF-import + QRDA/C-CDA-export converter jobs on conversion-core async queue (run HDS Ruby behind boundary)",
+          "FEFO issue logic + expiry-alert events on inventory lot",
+          "FHIR search-param semantics on hybrid BM25+vector index",
+          "field-level permission constraints on RBAC (read/write/mask per field per role)",
+          "COA templates + posting-rule catalog from source debit/credit conventions"
+        ],
+        "steps": [
+          "1. Per enrichment row, extend the existing service contract+impl with the missing depth (contract-first where new fields)",
+          "2. Reuse existing infra (conversion-core async queue, terminology ValueSetUpdated, search hybrid index, audit RBAC guards)",
+          "3. Seed DB-backed examples"
+        ],
+        "tests": [
+          "measure-binding cache invalidation",
+          "QRDA validation in CI",
+          "FEFO + expiry-alert",
+          "FHIR search-param on index",
+          "field-level mask test"
+        ],
+        "migration_notes": "all build on real-working foundations; reuse existing infra not parallel; Apache-2.0 HDS runnable behind service boundary",
+        "license_notes": "pophealth/HDS Apache-2.0 (with NOTICE); Frappe MIT (attribution); openmrs-fhir2 MPL (pattern); Dolibarr GPL (model)",
+        "risk": "low - incremental on strong foundations",
+        "no_loss_check": "closes completeness deltas; nothing removed; person benefits (plain-language coded labels, portable QRDA/C-CDA export, expiry-safe dispense, data-subject field-mask)",
+        "generator_first_target": "contract-typespec extensions + C-mode HDS converters via conversion-core"
+      },
+      {
+        "id": "fhir-r4-standards-alignment",
+        "category": "quality",
+        "area": "clinical standards conformance",
+        "title": "Clinical entities must align to FHIR-R4 + US Core profiles with terminology binding (LOINC/ICD-10/SNOMED/CPT/RxNorm/CVX/UCUM/DICOM) and SMART-on-FHIR scopes; current clinical contracts are scaffold or partial without profile conformance",
+        "local_evidence": "data crosswalk standards_alignment: all clinical resources map to FHIR-R4 + US Core; terminology-service exposes CodingSuggestion+FhirJson but clinical services not yet bound; no SMART-on-FHIR scopes for clinical API authz",
+        "external_evidence": "FHIR-R4 + US Core profiles; VistA-FHIR/OpenMRS-FHIR2/fhir-on-vista prove legacy-to-FHIR mapping; user directive: all clinical entities FHIR-R4 aligned",
+        "best_source": "FHIR-R4 spec + US Core; permissive vista/openmrs FHIR corpora for mapping patterns",
+        "suggested_mode": "E port-adapt (enforce profiles in contracts)",
+        "why": "User requirement: FHIR-R4 alignment mandatory; interop, 'my record' export, SMART app auth all depend on conformant resources + terminology binding",
+        "source_files": [
+          "external-sources/healthcare/openmrs-org/openmrs-module-fhir2/.../translators",
+          "external-sources/healthcare/worldvista/VistA-FHIR-Server-Codex/src/C0FHIR.m"
+        ],
+        "target_files": [
+          "curaos/backend/services/healthstack-*/specs/*.tsp (FHIR-R4 + US Core constrained)",
+          "curaos/backend/services/terminology-service (binding for all coded fields)",
+          "curaos/backend/services/identity-service (SMART-on-FHIR scopes)"
+        ],
+        "required_new": [
+          "FHIR-R4 + US Core must-support constraints in every clinical contract",
+          "terminology binding (LOINC/ICD-10-CM+SNOMED dual / CPT-HCPCS / RxNorm-NDC / CVX / UCUM / DICOM) on coded fields",
+          "SMART-on-FHIR / OAuth2 scopes for clinical API authz; clinician user -> Practitioner mapping"
+        ],
+        "steps": [
+          "1. Constrain every clinical .tsp to FHIR-R4 + US Core must-support",
+          "2. Bind all coded fields via terminology-service",
+          "3. Add SMART-on-FHIR scopes for clinical APIs; map clinician role -> Practitioner",
+          "4. FHIR-validate in CI"
+        ],
+        "tests": [
+          "US Core profile validation per resource",
+          "terminology binding resolves codes",
+          "SMART scope authz on clinical API"
+        ],
+        "migration_notes": "interop-service exposes patient-compartment ($everything) scoped to person via SMART for 'my record'; dual-code where required",
+        "license_notes": "FHIR-R4/US Core open; mapping patterns from permissive corpora",
+        "risk": "medium - conformance breadth",
+        "no_loss_check": "full coded clinical model + interop preserved; person gets correct plain-language labels + portable record",
+        "generator_first_target": "contract-typespec (FHIR-R4/US Core constraints) + terminology binding"
+      }
+    ],
+    "cross_cutting_notes": [
+      "Generator-first landing order is binding (curaos-generator-evolution-rule): feature -> codegen template/emitter (tools/codegen) -> @curaos/contracts (.tsp + AsyncAPI) -> @curaos/<name>-sdk -> service controller/drizzle -> FE via ui-app-emit. NEW domain models go in the SERVICE specs/<name>.tsp, NOT the mold (mold ships only health/protected/protected-write/whoami probes). Reusable cross-service behavior goes in tools/codegen/templates/service-core/specs/ and codegen emitters.",
+      "Sequencing: (1) fix data-truth in-memory stores FIRST (blocks billing/claims/sales live use); (2) build party-core REAL (upstream identity anchor everything FKs); (3) clinical FHIR resource set + terminology binding; (4) revenue cycle (@curaos/x12 + fee-schedule + coverage); (5) accounting-core GL/tax/currency; (6) ui-kit archetypes + generator dual-surface (unblocks every person surface); (7) workflow/automation primitives + connector registry; (8) domain verticals (insurance, maternity, CDS).",
+      "Reuse-over-parallel (curaos-reuse-dry-rule): Referral=ServiceRequest+Task; Carrier=Organization+InsurancePlan; Activity=Task+calendar (polymorphic parent, not parallel types); CarePlan.activity+Referral reference ONE tasks-core Task; expense/depreciation post to accounting-core (single GL owner, no duplicate ledger); medical-supply dispense reuses inventory issueStock; drug-as-product reuses commerce product + inventory SKU; one documents-core plane for clinical+CRM+ERP; one cadence primitive (donation recurrence) for donation+subscription+contract+recurring-invoice.",
+      "Person-centric lens applied to every gap: each yields a person surface (patient-app/personal-*/customer portal: journey-driven, simple) + a management surface (clinician/admin/business: full compliance+control) on shared contract+SDK; no source business/management/compliance feature dropped, only re-sequenced/defaulted/automated."
+    ]
+  },
+  "_computed": {
+    "maturity_distribution": {
+      "present-strong": 34,
+      "absent": 36,
+      "stub": 24,
+      "present-weak": 21,
+      "partial": 34,
+      "stronger-than-source": 14
+    },
+    "gap_count": 66,
+    "absent_weak_count": 81,
+    "absent_or_weak_mappings": [
+      {
+        "domain": "healthcare-revenue",
+        "feature": "Charge master / fee schedule (price lists, service pricing, contract rates)",
+        "taxonomy_id": "healthcare.revenue.healthcare-billing",
+        "local_maturity": "absent",
+        "best_source": [
+          "openhospital-core",
+          "openhospital-api",
+          "openhospital-gui",
+          "openemr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Multiple price lists, per-item override, 'other' charges, effective dating all captured in the new entity; nothing dropped.",
+        "target_local": "absent"
+      },
+      {
+        "domain": "healthcare-revenue",
+        "feature": "Insurance claim generation - X12 5010 837P / 837I (professional + institutional EDI)",
+        "taxonomy_id": "healthcare.revenue.insurance-claims",
+        "local_maturity": "stub",
+        "best_source": [
+          "openemr",
+          "vista-m"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "837P, 837I, ISA/GS envelopes, batch control numbers, subscriber/payer/provider/service loops, NDC/modifiers all preserved (filed as backlog if any segment slips a milestone). Nothing from OpenEMR's claim generator is cut.",
+        "target_local": "healthstack-claims-service"
+      },
+      {
+        "domain": "healthcare-revenue",
+        "feature": "Paper claim forms - HCFA/CMS-1500 + UB-04 (PDF generation)",
+        "taxonomy_id": "healthcare.revenue.insurance-claims",
+        "local_maturity": "absent",
+        "best_source": [
+          "openemr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "sdk-package",
+        "no_loss_check": "CMS-1500 + UB-04 both covered; no paper-form capability lost vs OpenEMR.",
+        "target_local": "absent"
+      },
+      {
+        "domain": "healthcare-revenue",
+        "feature": "Real-time insurance eligibility / benefits - X12 270/271",
+        "taxonomy_id": "healthcare.revenue.eligibility",
+        "local_maturity": "stub",
+        "best_source": [
+          "openemr",
+          "vista-m"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "270 inquiry, 271 parse (active coverage, copay, coinsurance, deductible, coverage dates) all preserved; manual override retained for offline payers.",
+        "target_local": "healthstack-billing-service"
+      },
+      {
+        "domain": "healthcare-revenue",
+        "feature": "ERA / 835 remittance auto-posting (payment + adjustment reconciliation)",
+        "taxonomy_id": "healthcare.revenue.revenue-cycle",
+        "local_maturity": "absent",
+        "best_source": [
+          "openemr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "CLP claim payment, CAS adjustments (CARC/RARC), SVC service-line detail, payment imbalance correction, EOB, auto-secondary billing all preserved.",
+        "target_local": "healthstack-billing-service"
+      },
+      {
+        "domain": "healthcare-revenue",
+        "feature": "Claim denial management / revenue-cycle worklist (status, denial reason, AR aging, patient responsibility)",
+        "taxonomy_id": "healthcare.revenue.revenue-cycle",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "openemr",
+          "vista-m",
+          "openhospital-gui"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "asyncapi-event",
+        "no_loss_check": "AR aging, denial reason, day-sheet reconciliation, resubmit/appeal all preserved; local worklist fields kept and enriched with CARC/RARC + live aging.",
+        "target_local": "healthstack-billing-service"
+      },
+      {
+        "domain": "erp-finance",
+        "feature": "Customer invoicing + recurring invoices + PDF",
+        "taxonomy_id": "erp.accounting.invoicing",
+        "local_maturity": "stub",
+        "best_source": [
+          "odoo",
+          "dolibarr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Currently stub; gap filed with full line-item/state-machine/recurring/PDF scope so nothing from source is lost on build.",
+        "target_local": "sales-core-service"
+      },
+      {
+        "domain": "erp-finance",
+        "feature": "Tax management (rules, templates, withholding, computation)",
+        "taxonomy_id": "erp.accounting.taxes",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "odoo",
+          "erpnext"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Currently flat-field only; gap filed with full rule-engine/template/withholding scope so no source tax capability is lost on build.",
+        "target_local": "accounting-core-service"
+      },
+      {
+        "domain": "erp-finance",
+        "feature": "Bank reconciliation (statement import + matching rules)",
+        "taxonomy_id": "erp.accounting.bank-reconciliation",
+        "local_maturity": "absent",
+        "best_source": [
+          "odoo",
+          "erpnext"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Absent locally; gap filed with statement-import + matching-rule + manual-match scope so source bank-rec capability is fully captured on build.",
+        "target_local": "accounting-core-service"
+      },
+      {
+        "domain": "erp-finance",
+        "feature": "Multi-currency (currency master + exchange rates + conversion)",
+        "taxonomy_id": "erp.multi.multi-currency",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "odoo",
+          "dolibarr",
+          "erpnext"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Per-currency ledger invariant present; currency master + rates + FX-gain-loss are gaps (filed). No multi-currency capability dropped.",
+        "target_local": "accounting-core-service"
+      },
+      {
+        "domain": "erp-finance",
+        "feature": "Regional compliance / localization (tax overrides, e-invoice)",
+        "taxonomy_id": "erp.multi.localization",
+        "local_maturity": "absent",
+        "best_source": [
+          "erpnext",
+          "odoo"
+        ],
+        "integration_mode": "pattern-reference-only",
+        "generator_first_target": "codegen-emitter",
+        "no_loss_check": "Absent locally; gap filed as on-demand locale-pack pattern so per-country compliance can be added without losing the source approach.",
+        "target_local": "accounting-core-service"
+      },
+      {
+        "domain": "erp-finance",
+        "feature": "Analytic / cost-center accounting",
+        "taxonomy_id": "erp.accounting.general-ledger",
+        "local_maturity": "absent",
+        "best_source": [
+          "odoo"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Absent locally; gap filed so Odoo analytic capability is captured without loss.",
+        "target_local": "accounting-core-service"
+      },
+      {
+        "domain": "crm-sales",
+        "feature": "Lead capture, qualification, source tracking + lead-to-contact/account conversion",
+        "taxonomy_id": "crm-insurance-broker.sales.leads",
+        "local_maturity": "absent",
+        "best_source": [
+          "odoo",
+          "espocrm",
+          "suitecrm-core"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preserved: source, status, lost_reason, probability, expected_revenue, assigned owner, conversion-to-contact/account. None dropped; lead+opportunity unification is re-sequencing not capability loss.",
+        "target_local": "crm-core-service"
+      },
+      {
+        "domain": "crm-sales",
+        "feature": "Opportunity / deal pipeline with stages, probability weighting, expected revenue, kanban",
+        "taxonomy_id": "crm-insurance-broker.sales.opportunities",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "suitecrm",
+          "espocrm",
+          "suitecrm-core",
+          "odoo"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preserved: sales_stage, probability, amount/expected_revenue, account/contact links, lost_reason, quote link. Local Deal already has amount+stage; enrich with probability/expected_revenue/lost_reason.",
+        "target_local": "crm-core-service"
+      },
+      {
+        "domain": "crm-sales",
+        "feature": "Pipelines / stages / teams / lost-reason as configurable pipeline definitions",
+        "taxonomy_id": "crm-insurance-broker.sales.pipelines",
+        "local_maturity": "stub",
+        "best_source": [
+          "odoo",
+          "espocrm"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preserved: configurable stages, teams, lost-reason taxonomy. Local has STAGE_KEY free-string today (stub); promote to managed stage definitions.",
+        "target_local": "crm-core-service"
+      },
+      {
+        "domain": "crm-sales",
+        "feature": "Activities: tasks, calls, meetings, notes with parent polymorphic links + reminders + calendar",
+        "taxonomy_id": "crm-insurance-broker.service.activities",
+        "local_maturity": "stub",
+        "best_source": [
+          "suitecrm",
+          "espocrm",
+          "suitecrm-core"
+        ],
+        "integration_mode": "api-adapter",
+        "generator_first_target": "sdk-package",
+        "no_loss_check": "Preserved: tasks, calls (duration/reschedule), meetings, notes, reminders, polymorphic parent link, calendar view. Mapped onto tasks-sdk/calendar-sdk instead of duplicated.",
+        "target_local": "crm-core-service"
+      },
+      {
+        "domain": "crm-sales",
+        "feature": "Cases / support tickets: status, priority, account/contact link, escalation, business hours, KB suggestions",
+        "taxonomy_id": "crm-insurance-broker.service.cases-tickets",
+        "local_maturity": "stub",
+        "best_source": [
+          "suitecrm",
+          "espocrm",
+          "suitecrm-core"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preserved: case_number (auto), status, priority, description, account/contact relation, escalation, business hours/SLA, KB suggestion, audited flag. None dropped.",
+        "target_local": "business-cases-service"
+      },
+      {
+        "domain": "crm-sales",
+        "feature": "Email sync: inbound IMAP, outbound SMTP, email log linked to records, templates",
+        "taxonomy_id": "crm-insurance-broker.service.email-sync",
+        "local_maturity": "absent",
+        "best_source": [
+          "suitecrm",
+          "espocrm",
+          "suitecrm-core"
+        ],
+        "integration_mode": "run-as-background-service",
+        "generator_first_target": "asyncapi-event",
+        "no_loss_check": "Preserved: inbound IMAP capture, outbound SMTP/templates, email log linked to contact/case, address-bean junction. Campaign/mass-email filed under a marketing owner (forward).",
+        "target_local": "crm-core-service"
+      },
+      {
+        "domain": "contracts-recurring",
+        "feature": "Contract / service-agreement management (header + line items, lifecycle draft->validated->closed, attached products/services, contract events agenda)",
+        "taxonomy_id": "erp.recurring.contracts",
+        "local_maturity": "absent",
+        "best_source": [
+          "dolibarr",
+          "erpnext",
+          "suitecrm-core"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preserved: header (ref/party/date), line items (product/qty/price/tax), per-line open/closed lifecycle, contract events agenda, signed_status linkage, REST CRUD parity with api_contracts.class.php.",
+        "target_local": "absent"
+      },
+      {
+        "domain": "contracts-recurring",
+        "feature": "Subscriptions & recurring billing (subscription plans, billing interval/count, trial period, billing-period rollover, auto invoice generation, days-until-due, cancel-at-period-end, billing heatmap/history)",
+        "taxonomy_id": "erp.recurring.subscriptions",
+        "local_maturity": "stub",
+        "best_source": [
+          "erpnext",
+          "odoo"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preserved: plan/plan-detail catalog, billing interval+count, trial start/end, billing-period rollover, auto-invoice generation hook, days-until-due, cancel-at-period-end, additional discount, tax/cost-center dimensions (kept in accounting-core link). Filed forward if not all land in v1: subscription_invoice reconciliation.",
+        "target_local": "absent"
+      },
+      {
+        "domain": "contracts-recurring",
+        "feature": "Renewals & renewal alerts (contract/policy term end, auto-renew vs notify, renewal reminders, term rollover)",
+        "taxonomy_id": "erp.recurring.renewals",
+        "local_maturity": "absent",
+        "best_source": [
+          "dolibarr",
+          "erpnext",
+          "suitecrm-core"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "asyncapi-event",
+        "no_loss_check": "Preserved: term end tracking, auto-renew vs manual, renewal reminders (via notify), renewal-triggered re-sign (via esign), renewal alerts (crm renewal-alerts parity).",
+        "target_local": "absent"
+      },
+      {
+        "domain": "erp-trade-supply",
+        "feature": "Sales Order Management (quote -> order -> confirm; order lines, delivery/invoice status)",
+        "taxonomy_id": "erp.trade.sales",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "odoo",
+          "erpnext"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preserved: quote lifecycle, order lines referencing catalog SKUs, status state machine, invoicing, revenue recognition cap, commission rules. None dropped; persistence hardening filed as gap.",
+        "target_local": "sales-core-service"
+      },
+      {
+        "domain": "erp-trade-supply",
+        "feature": "Quotation / Proposal Management (quote doc, validity, convert-to-order)",
+        "taxonomy_id": "erp.trade.quotes",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "erpnext"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preserved: quote lines, status, accept/reject, conversion to order. Validity-window + revision filed as enrichment.",
+        "target_local": "sales-core-service"
+      },
+      {
+        "domain": "erp-trade-supply",
+        "feature": "Pricing Rules & Discounts (conditional pricing, qty breaks, customer-group price)",
+        "taxonomy_id": "erp.trade.discounts",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "erpnext"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preserved when implemented: conditional pricing, qty/amount breaks, validity windows, customer/group/territory scope, discount-vs-rate. Currently a GAP (see gaps).",
+        "target_local": "commerce-core-service"
+      },
+      {
+        "domain": "erp-trade-supply",
+        "feature": "Manufacturing & Production (work order, production order, BOM consumption)",
+        "taxonomy_id": "erp.supply.manufacturing",
+        "local_maturity": "absent",
+        "best_source": [
+          "odoo",
+          "erpnext"
+        ],
+        "integration_mode": "reject",
+        "generator_first_target": "na",
+        "no_loss_check": "Feature intentionally not built; filed forward, not lost. If a compounding/lab-prep vertical needs it, BOM+work-order enter via a healthstack-overlay contract then.",
+        "target_local": "absent"
+      },
+      {
+        "domain": "erp-trade-supply",
+        "feature": "Bill of Materials (BOM) (components, qty, multi-level explosion, operations)",
+        "taxonomy_id": "erp.supply.bom",
+        "local_maturity": "absent",
+        "best_source": [
+          "dolibarr",
+          "erpnext",
+          "odoo"
+        ],
+        "integration_mode": "reject",
+        "generator_first_target": "na",
+        "no_loss_check": "Manufacturing-BOM intentionally deferred with MRP. Kit/bundle need re-routed to catalog enrichment, not lost.",
+        "target_local": "absent"
+      },
+      {
+        "domain": "erp-trade-supply",
+        "feature": "Point of Sale (POS sessions, POS invoice, closing entry, offline order)",
+        "taxonomy_id": "erp.supply.pos",
+        "local_maturity": "absent",
+        "best_source": [
+          "erpnext",
+          "dolibarr"
+        ],
+        "integration_mode": "pattern-reference-only",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preserved when built: POS order, tender/payment, cash session open/close, reconciliation, offline. Currently absent - filed forward (lower priority than pricing/fulfillment).",
+        "target_local": "business-shop-service"
+      },
+      {
+        "domain": "healthcare-interop-quality",
+        "feature": "FHIR R4 resource provider framework (Patient, Observation, Encounter, Condition, AllergyIntolerance, MedicationRequest, DiagnosticReport, Immunization, Practitioner/Role, Location, Task, ServiceRequest)",
+        "taxonomy_id": "healthcare.interop.fhir",
+        "local_maturity": "stub",
+        "best_source": [
+          "openmrs-fhir2",
+          "fhir-on-vista",
+          "vista-fhir-codex (VistA-FHIR-Server-Codex)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "All source resource types (Patient, Observation, Encounter, Condition, Allergy, Medication[Request|Statement|Dispense], DiagnosticReport/ServiceRequest, Immunization, Practitioner/Role, Location, Task, Group, CareTeam, Procedure) enumerated and mapped to generated translator pairs; patient-compartment + dual R3/R4 versioning preserved as contract config.",
+        "target_local": "healthstack-interop-service"
+      },
+      {
+        "domain": "healthcare-interop-quality",
+        "feature": "OpenMRS<->FHIR translator framework (generic bidirectional model<->resource mapping seam)",
+        "taxonomy_id": "healthcare.interop.hl7",
+        "local_maturity": "absent",
+        "best_source": [
+          "openmrs-fhir2"
+        ],
+        "integration_mode": "pattern-reference-only",
+        "generator_first_target": "codegen-emitter",
+        "no_loss_check": "Bidirectional (to+from FHIR), reference resolution, and category/code-to-terminology lookup all captured as emitter responsibilities; nothing dropped.",
+        "target_local": "tools/codegen (service-core template) + fhir-client package"
+      },
+      {
+        "domain": "healthcare-interop-quality",
+        "feature": "Clinical Quality Measure (CQM/eCQM) execution engine: population criteria (IPP/DENOM/NUMER/DENEX/DENEXCEP/NUMEX/MSRPOPL/OBSERV/STRAT), measure calculation over a patient cohort",
+        "taxonomy_id": "healthcare.platform.reports-dashboards",
+        "local_maturity": "stub",
+        "best_source": [
+          "pophealth",
+          "health-data-standards (projectcypress)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "All 10 population codes, stratification (STRAT), observation (OBSERV/CV measures), measure baselines + performance targets, and cohort/patient-filtering preserved; provider/practice hierarchy preserved as management surface.",
+        "target_local": "healthstack-quality-service"
+      },
+      {
+        "domain": "healthcare-interop-quality",
+        "feature": "HQMF measure import & parsing (Health Quality Measure Format -> executable measure model)",
+        "taxonomy_id": "healthcare.interop.snomed-loinc-terminology",
+        "local_maturity": "absent",
+        "best_source": [
+          "health-data-standards (projectcypress)",
+          "pophealth"
+        ],
+        "integration_mode": "run-as-background-service",
+        "generator_first_target": "asyncapi-event",
+        "no_loss_check": "HQMF document model, data_criteria, population_criteria, precondition trees, generator (round-trip) all available via the wrapped lib; nothing lost.",
+        "target_local": "conversion-core-service"
+      },
+      {
+        "domain": "healthcare-interop-quality",
+        "feature": "QRDA Category I (per-patient) + Category III (aggregate) export, C32/C-CDA document generation, and QRDA/CDA validation",
+        "taxonomy_id": "healthcare.interop.hl7",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "health-data-standards (projectcypress)",
+          "pophealth"
+        ],
+        "integration_mode": "run-as-background-service",
+        "generator_first_target": "asyncapi-event",
+        "no_loss_check": "QRDA Cat I, Cat III, C32/HITSP C32, and document validation all preserved via the wrapped HDS lib; clinical-doc CDA bridge retained.",
+        "target_local": "clinical-doc-service (CDA bridge) + conversion-core-service (export) + healthstack-quality-service (QRDA III)"
+      },
+      {
+        "domain": "healthcare-interop-quality",
+        "feature": "Public-health quality reporting: aggregate measure submission (QRDA III + Excel/CSV extracts), patient filtering / population cohort definition, measure baselines & performance targets",
+        "taxonomy_id": "healthcare.ancillary.public-health-reporting",
+        "local_maturity": "stub",
+        "best_source": [
+          "pophealth"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Cohort filtering, baselines, performance targets, QRDA III + Excel/CSV export all preserved.",
+        "target_local": "healthstack-quality-service"
+      },
+      {
+        "domain": "healthcare-interop-quality",
+        "feature": "HL7v2 ADT / message ingestion + FileMan<->FHIR datetime + bundle dedup/entity-mapping (legacy EHR integration plumbing)",
+        "taxonomy_id": "healthcare.interop.hl7",
+        "local_maturity": "stub",
+        "best_source": [
+          "fhir-on-vista",
+          "vista-fhir-codex (VistA-FHIR-Server-Codex)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "asyncapi-event",
+        "no_loss_check": "ADT ingestion, bundle dedup, entity mapping, datetime conversion all preserved as utilities + events.",
+        "target_local": "healthstack-interop-service"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Policies (master insurance policy record: policy number, status, effective/expiry, insured party, carrier, product line)",
+        "taxonomy_id": "crm-insurance-broker.policy.policies",
+        "local_maturity": "absent",
+        "best_source": [
+          "suitecrm-core",
+          "suitecrm",
+          "espocrm",
+          "dolibarr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "All source contract fields (number, status, dates, line items, party, totals) preserved as policy fields; lifecycle state-machine retained; nothing dropped, insurance-specific fields ADDED.",
+        "target_local": "absent (new policy-core-service; nearest = crm-core-service + sales-core-service)"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Policy terms & renewals (term boundaries, auto-renewal, renewal alerts, renewal pipeline)",
+        "taxonomy_id": "crm-insurance-broker.policy.policy-terms",
+        "local_maturity": "absent",
+        "best_source": [
+          "suitecrm-core",
+          "dolibarr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Term dates, auto-renew flag, renewal pipeline stages, and alert lead-times all preserved via policy term submodel + workflow definition.",
+        "target_local": "absent (policy-core-service term submodel + tasks-core-service for alerts + workflow-core-service for renewal flow)"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Carriers / insurers (insurance company master, products, appointments)",
+        "taxonomy_id": "crm-insurance-broker.policy.carriers-insurers",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "espocrm",
+          "suitecrm",
+          "dolibarr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Carrier identity, product lines, appointment/commission-agreement linkage preserved as party role + policy refs.",
+        "target_local": "party-core-service (carrier as party/organization) + new policy-core-service ref"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Coverage lines (per-risk coverage items, limits, deductibles, sub-line itemization)",
+        "taxonomy_id": "crm-insurance-broker.policy.coverage-lines",
+        "local_maturity": "absent",
+        "best_source": [
+          "suitecrm-core",
+          "dolibarr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Limit, deductible, premium-per-line, grouping all preserved from AOS_Line_Item_Groups/contratligne; perils ADDED.",
+        "target_local": "absent (policy-core-service coverage-line child entity); pattern from sales-core quote line items"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Premium schedules & installments (billing schedule, pay plans, installment generation, AR posting)",
+        "taxonomy_id": "crm-insurance-broker.policy.premium-schedules",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "suitecrm",
+          "dolibarr",
+          "openemr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Schedule frequency, installment amounts, AR posting, late-fee, delinquency handling preserved; carrier-remittance reconciliation retained on management surface.",
+        "target_local": "accounting-core-service (AR + invoices) + new policy-core premium-schedule generator"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Endorsements (mid-term policy changes/amendments with versioning + audit)",
+        "taxonomy_id": "crm-insurance-broker.policy.endorsements",
+        "local_maturity": "absent",
+        "best_source": [
+          "suitecrm-core",
+          "dolibarr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Effective date, premium delta, prior-version linkage, audit provenance preserved; pro-rata calc on management surface.",
+        "target_local": "absent (policy-core-service endorsement entity); reuse documents-core versioning + audit hash-chain pattern"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Beneficiaries (designated parties, allocation %, relationship, contingent beneficiaries)",
+        "taxonomy_id": "crm-insurance-broker.policy.beneficiaries",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "espocrm",
+          "suitecrm"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Allocation %, relationship, primary/contingent, payout designation preserved; 100%-sum validation enforced via contract validator.",
+        "target_local": "party-core-service (beneficiary as party + relationship) + policy-core beneficiary link"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Brokers / producers (agent records, licensing, NPN, appointments per carrier)",
+        "taxonomy_id": "crm-insurance-broker.broker.brokers-producers",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "suitecrm-core",
+          "espocrm",
+          "dolibarr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "License#, NPN, expiry, carrier appointments, E&O preserved as producer-role metadata; compliance alerts via tasks-core.",
+        "target_local": "party-core-service (producer as party+role) + identity-service (user)"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Broker hierarchy & multi-level contracts (upline/downline tree, agency-of-record, override structure)",
+        "taxonomy_id": "crm-insurance-broker.broker.broker-hierarchy",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "suitecrm-core",
+          "espocrm"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Upline/downline edges, override percentages, agency-of-record, multi-level contract terms preserved.",
+        "target_local": "org-core-service (org hierarchy) + party-core (relationships)"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Commissions & commission splits (commission calc per policy/line, splits across producers, override/multi-level payout)",
+        "taxonomy_id": "crm-insurance-broker.broker.commissions",
+        "local_maturity": "stub",
+        "best_source": [
+          "dolibarr",
+          "suitecrm-core"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Per-line rates, split %, override %, clawback-on-cancel, carrier-statement reconciliation all preserved; payout posts to existing ledger.",
+        "target_local": "sales-core-service (commissions feature) + accounting-core (payout posting)"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "Claims (insurance FNOL, claim lifecycle, adjuster assignment, claim followup)",
+        "taxonomy_id": "crm-insurance-broker.claims.claims",
+        "local_maturity": "stub",
+        "best_source": [
+          "openemr",
+          "espocrm",
+          "erpnext",
+          "suitecrm"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Claim status lifecycle, adjuster assignment, reserves, followup SLA, document attachments, audit preserved; carrier transmission on management surface.",
+        "target_local": "business-cases-service (case lifecycle) + healthstack-claims-service (claim worklist pattern)"
+      },
+      {
+        "domain": "insurance-broker",
+        "feature": "KYC / compliance (identity verification, AML screening, document collection, regulatory checks)",
+        "taxonomy_id": "crm-insurance-broker.compliance.kyc-compliance",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "espocrm",
+          "suitecrm",
+          "dolibarr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "ID verification, AML screening, document checklist, re-verification schedule, audit evidence preserved; screening hits routed to compliance surface.",
+        "target_local": "absent (compliance flow) - reuse identity-service + documents-core + workflow-core + audit"
+      },
+      {
+        "domain": "platform-cross",
+        "feature": "Self-serve report/query builder (fields, group-by, filters, charts, scheduled delivery)",
+        "taxonomy_id": "crm-insurance-broker.platform.reporting",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "suitecrm",
+          "suitecrm-core",
+          "frappe",
+          "erpnext",
+          "odoo",
+          "espocrm"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "All AOR capabilities (multi-field select, group-by, filter conditions, chart types, scheduled reports) preserved as a report-definition contract entity; nothing dropped, scheduling already exists locally.",
+        "target_local": "reports-service"
+      },
+      {
+        "domain": "workflow-automation",
+        "feature": "Connector/Piece framework (typed connectors, actions, auth, categories, versioning)",
+        "taxonomy_id": "workflow-automation.catalog.connectors",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "activepieces",
+          "windmill",
+          "Frappe",
+          "n8n-ref"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "sdk-package",
+        "no_loss_check": "PieceType/Category/Auth strategies + per-action schemas + OAuth vault all preserved; fixture becomes the seed of a real registry, no capability lost.",
+        "target_local": "automation-core-service + integrations-core-service"
+      },
+      {
+        "domain": "workflow-automation",
+        "feature": "Script/code step execution (multi-language: JS/Python/SQL/bash, sandboxed)",
+        "taxonomy_id": "workflow-automation.catalog.script-steps",
+        "local_maturity": "stub",
+        "best_source": [
+          "windmill",
+          "n8n-ref"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Multi-language code execution capability gained (currently absent); no source feature lost.",
+        "target_local": "plugin-runtime-service"
+      },
+      {
+        "domain": "workflow-automation",
+        "feature": "AI/LLM steps + AI agent framework (tool-calling, knowledge base, memory)",
+        "taxonomy_id": "workflow-automation.catalog.ai-llm-steps",
+        "local_maturity": "absent",
+        "best_source": [
+          "activepieces",
+          "windmill",
+          "n8n-ref"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "New capability (AI agent + tool calling + KB) added; nothing removed. PHI boundary enforced so compliance preserved.",
+        "target_local": "automation-core-service (new ai-step) + plugin-runtime-service"
+      },
+      {
+        "domain": "workflow-automation",
+        "feature": "MCP (Model Context Protocol) tooling integration",
+        "taxonomy_id": "workflow-automation.catalog.mcp-tooling-integration",
+        "local_maturity": "absent",
+        "best_source": [
+          "activepieces",
+          "windmill"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "New capability; no loss. Token scoping + disabled-tools list preserve governance.",
+        "target_local": "automation-core-service (new mcp-server entity) + plugin-runtime-service"
+      },
+      {
+        "domain": "workflow-automation",
+        "feature": "Cron / scheduled triggers (timezone, enable/disable, recurrence)",
+        "taxonomy_id": "workflow-automation.execution.cron-schedules",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "windmill",
+          "n8n-ref",
+          "Frappe"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Cron expr + timezone + enable/disable + retry + error-handler path all enter the contract; no loss.",
+        "target_local": "automation-core-service + calendar-core-service"
+      },
+      {
+        "domain": "workflow-automation",
+        "feature": "Concurrency limits + debouncing",
+        "taxonomy_id": "workflow-automation.resilience.resilience",
+        "local_maturity": "absent",
+        "best_source": [
+          "windmill"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Concurrency + debounce capability added; nothing lost.",
+        "target_local": "automation-core-service"
+      },
+      {
+        "domain": "workflow-automation",
+        "feature": "Secrets / credential / variable management (encrypted, pluggable backends)",
+        "taxonomy_id": "workflow-automation.ops.secrets-management",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "windmill",
+          "n8n-ref",
+          "node-red"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Encrypted secrets + variables + pluggable backends representable; OAuth vault preserved, formalized into contract.",
+        "target_local": "integrations-core-service"
+      },
+      {
+        "domain": "workflow-automation",
+        "feature": "Workflow versioning / draft system / history + restore",
+        "taxonomy_id": "workflow-automation.authoring.workflow-versioning",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "windmill",
+          "n8n-ref"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Editorial states + version snapshots + restore + collaborative drafts all covered; snapshot/restore API added.",
+        "target_local": "business-workflow-service + workflow-core-service"
+      },
+      {
+        "domain": "workflow-automation",
+        "feature": "Developer code workflow + expression engine (formula/calculated fields, dynamic params)",
+        "taxonomy_id": "workflow-automation.authoring.developer-code-workflow",
+        "local_maturity": "absent",
+        "best_source": [
+          "espocrm",
+          "windmill",
+          "n8n-ref"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Dynamic params + formula functions added (currently absent); sandboxing preserves security, no loss.",
+        "target_local": "automation-core-service + builder-core-service"
+      },
+      {
+        "domain": "workflow-automation",
+        "feature": "Test / simulation / preview mode (dry-run, pin data, step debug)",
+        "taxonomy_id": "workflow-automation.authoring.test-simulation-mode",
+        "local_maturity": "absent",
+        "best_source": [
+          "windmill",
+          "activepieces",
+          "n8n-ref"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Preview/dry-run/pin-data/step-debug added (currently absent); dry-run guard ensures no real side effects, no loss.",
+        "target_local": "workflow-designer + workflow-core-service"
+      },
+      {
+        "domain": "erp-delivery-people",
+        "feature": "Attendance / clock-in-out + overtime rules",
+        "taxonomy_id": "erp.people.hr",
+        "local_maturity": "absent",
+        "best_source": [
+          "odoo"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Check-in/out + overtime computation preserved; Odoo's 38KB overtime-rule engine is enterprise-grade depth that can be filed forward incrementally without losing the basic attendance capability now.",
+        "target_local": "hr-core-service (extend; or reuse TimeEntry primitive for clock events)"
+      },
+      {
+        "domain": "erp-delivery-people",
+        "feature": "Expenses (expense claims, categories, employee reimbursement, approval, GL/journal posting, mileage)",
+        "taxonomy_id": "erp.people.expenses",
+        "local_maturity": "absent",
+        "best_source": [
+          "odoo"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Expense claim, category, approval, GL posting, tax, mileage, billable-to-project all preserved via the new contract + accounting-core integration; nothing dropped, accounting concerns delegated to existing GL owner instead of duplicated.",
+        "target_local": "absent (new expense-core-service; posts to accounting-core)"
+      },
+      {
+        "domain": "erp-delivery-people",
+        "feature": "Fixed-asset management + depreciation (asset register, depreciation schedule, capitalization, maintenance, repair, movement/transfer)",
+        "taxonomy_id": "erp.people.assets",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "erpnext",
+          "odoo"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Asset, depreciation schedule, capitalization, maintenance, repair, movement, disposal all preserved; depreciation posting delegated to accounting-core (no duplicate ledger). Custody/assignment added as the person dimension - net feature gain.",
+        "target_local": "fleet-core-service (has generic Asset + MaintenanceSchedule) + accounting-core (depreciation journals)"
+      },
+      {
+        "domain": "erp-delivery-people",
+        "feature": "Payroll (salary structure, salary slip, pay run, statutory deductions)",
+        "taxonomy_id": "erp.people.payroll",
+        "local_maturity": "absent",
+        "best_source": [
+          "erpnext",
+          "vista-m"
+        ],
+        "integration_mode": "pattern-reference-only",
+        "generator_first_target": "na",
+        "no_loss_check": "Compensation record + pay frequency + W2/1099 tax forms already exist locally (hr-core + accounting-core). Full pay-run/statutory engine is filed forward, not lost; no current capability removed.",
+        "target_local": "absent (future payroll-core; consumes hr-core compensation + attendance/leave, posts to accounting-core)"
+      },
+      {
+        "domain": "erp-delivery-people",
+        "feature": "Recruitment / applicant tracking (job posting, candidate pipeline, stages, interview)",
+        "taxonomy_id": "erp.people.hr",
+        "local_maturity": "absent",
+        "best_source": [
+          "odoo"
+        ],
+        "integration_mode": "pattern-reference-only",
+        "generator_first_target": "na",
+        "no_loss_check": "Recruitment capability remains achievable via builder+BPM+tasks composition; no feature lost, just no dedicated silo. File forward if a vertical needs first-class ATS.",
+        "target_local": "absent (could reuse builder-core forms + workflow-core pipeline + tasks-core)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Family history (relatives, conditions, hereditary risk) + RelatedPerson",
+        "taxonomy_id": "healthcare.registration.family-history",
+        "local_maturity": "absent",
+        "best_source": [
+          "VHAINNOVATIONS/FamilyHistoryCPRS",
+          "openmrs-fhir2 (RelatedPerson)",
+          "maternity-tracker"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Relative + per-relative diseases/conditions + age-of-onset + vital-status modeled in FHIR FamilyMemberHistory; nothing lost vs the CPRS files.",
+        "target_local": "absent (best owner = healthstack-problems-service family-history slice or healthstack-patient overlay)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Triage (ESI/acuity + triage vitals before encounter)",
+        "taxonomy_id": "healthcare.scheduling.triage",
+        "local_maturity": "absent",
+        "best_source": [
+          "openhospital-ui (PatientExamination triage)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Acuity level, triage vitals, queue reprioritization preserved.",
+        "target_local": "absent (best owner = encounter-service triage slice + scheduling-service queue)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Problem list / conditions (FHIR Condition, ICD/SNOMED-coded problems)",
+        "taxonomy_id": "healthcare.encounter.problems",
+        "local_maturity": "stub",
+        "best_source": [
+          "openmrs-core",
+          "fhir-on-vista (Condition)",
+          "vista-fhir-codex",
+          "openhospital-core (Disease)",
+          "ehmp-app"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "FHIR Condition full field set (clinicalStatus, verificationStatus, category, severity, onset/abatement, stage, bodySite, coded) preserved; nothing lost vs source.",
+        "target_local": "healthstack-problems-service"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Vitals / observations (BP, pulse, temp, height/weight, charting/trends)",
+        "taxonomy_id": "healthcare.encounter.vitals",
+        "local_maturity": "stub",
+        "best_source": [
+          "fhir-on-vista (Observation)",
+          "openmrs-core/fhir2",
+          "openemr",
+          "openhospital-core",
+          "ehmp-app",
+          "vista-fhir-codex",
+          "maternity-tracker",
+          "avs (charting)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "FHIR Observation (LOINC code, value+UCUM unit, components for BP, reference range, interpretation flag, body-site, method) preserved; trend charting preserved.",
+        "target_local": "healthstack-devices-service (vitals/observations) or new vitals slice; terminology (LOINC/UCUM)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "After-Visit Summary (AVS) generation + patient handout",
+        "taxonomy_id": "healthcare.encounter.after-visit-summary",
+        "local_maturity": "absent",
+        "best_source": [
+          "avs (VA After Visit Summary)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "AVS sections (demographics, problems, meds, allergies, vitals, results, instructions, education, follow-up, providers) preserved from the AVS source model.",
+        "target_local": "absent (best owner = clinical-doc-service AVS composition + reports-service render)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Laboratory orders + results + LIS (panels, specimens, reference ranges, abnormal flags)",
+        "taxonomy_id": "healthcare.orders.lab-information-system",
+        "local_maturity": "stub",
+        "best_source": [
+          "vista-m (Lab File 60/63/65)",
+          "vista-fhir-codex (GETLAB)",
+          "openmrs-fhir2 (DiagnosticReport)",
+          "bahmni-core (labOrderResults)",
+          "openhospital-api (Laboratory)",
+          "ehmp-app (lab grid)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Panels, specimen, accession, reference ranges, interpretation/critical flags, LOINC coding preserved.",
+        "target_local": "healthstack-lab-service + orders-service (lab order) + terminology (LOINC)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Radiology / imaging orders + protocols + worklist + DICOM/PACS",
+        "taxonomy_id": "healthcare.orders.radiology",
+        "local_maturity": "stub",
+        "best_source": [
+          "RAPTOR (protocol library, worklist, state machine, scheduling)",
+          "vista-m (File 70/74)",
+          "openhospital-core (DICOM)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Protocol library, keyword/modality grouping, worklist state machine, contraindication rules, DICOM/PACS link, report preserved.",
+        "target_local": "healthstack-imaging-service + orders-service (imaging order)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "DICOM / PACS image storage + viewer integration",
+        "taxonomy_id": "healthcare.orders.dicom-pacs",
+        "local_maturity": "stub",
+        "best_source": [
+          "RAPTOR (VixDao viewer)",
+          "vista-m",
+          "openhospital-core (FileDicom/DicomData)"
+        ],
+        "integration_mode": "api-adapter",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Study/series/instance metadata, multi-modality, viewer access preserved.",
+        "target_local": "healthstack-imaging-service + storage-service"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Medications / prescriptions / pharmacy (MedicationRequest, dispensing, drug DB, RxNorm)",
+        "taxonomy_id": "healthcare.medications.prescriptions",
+        "local_maturity": "stub",
+        "best_source": [
+          "openmrs-fhir2 (Medication/MedicationRequest)",
+          "vista-m (Pharmacy File 52/55)",
+          "vista-fhir-codex (GETMED)",
+          "vista-fhir-loader (RxNorm mapping)",
+          "bahmni-core (drug orders)",
+          "openemr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "MedicationRequest (medication, dosage, timing, route, dispense request, refills), MedicationDispense, drug DB/RxNorm coding preserved.",
+        "target_local": "healthstack-meds-service + terminology (RxNorm) + orders-service"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Medication administration (MAR / inpatient drug administration)",
+        "taxonomy_id": "healthcare.medications.medication-administration",
+        "local_maturity": "stub",
+        "best_source": [
+          "ehmp-app (medication review)",
+          "openhospital-core (Therapy/TherapyRow)",
+          "openhospital-ui"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "MedicationAdministration (status, scheduled/actual time, dose given, route, performer, reasonNotGiven) preserved.",
+        "target_local": "healthstack-meds-service (MAR slice)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Allergies / adverse reactions / intolerances (AllergyIntolerance, reactions, severity)",
+        "taxonomy_id": "healthcare.medications.allergies",
+        "local_maturity": "stub",
+        "best_source": [
+          "openmrs-core (Allergy/AllergyReaction)",
+          "openmrs-fhir2 (AllergyIntolerance)",
+          "vista-m (File 120.8 GMR ALLERGIES)",
+          "vista-fhir-codex (GETALGY)",
+          "openemr",
+          "ehmp-app"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "AllergyIntolerance (substance code, type, category, criticality, clinical/verification status, reactions w/ manifestation+severity) preserved; drug-allergy checking preserved.",
+        "target_local": "healthstack-meds-service (allergies slice) or healthstack-problems-service"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Care plans / care coordination + program enrollment workflows + daily plan",
+        "taxonomy_id": "healthcare.care.care-plans",
+        "local_maturity": "stub",
+        "best_source": [
+          "openmrs-core/bahmni (Program/ProgramWorkflow state machine)",
+          "fhir-on-vista (CareTeam)",
+          "openemr (care plans)",
+          "daily-plan (dashboard templates)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "CarePlan, CareTeam, Goal, activities, program enrollment + workflow-state-machine preserved (mapped onto BPM + FHIR CarePlan).",
+        "target_local": "healthstack-careplans-service"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Immunizations / vaccinations (FHIR Immunization, CVX, schedules, registry)",
+        "taxonomy_id": "healthcare.care.immunizations",
+        "local_maturity": "absent",
+        "best_source": [
+          "openmrs-fhir2 (Immunization)",
+          "openhospital-api (Vaccine/PatientVaccine)",
+          "openmrs-distro (Program)",
+          "vista-fhir-codex (GETIMM, CVX)",
+          "ehmp-app",
+          "openemr"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "FHIR Immunization (CVX code, dose, series, lot, site, route, performer, reaction, status) + recommendation schedule + registry reporting preserved.",
+        "target_local": "healthstack-careplans-service (immunizations slice) or new immunization slice; terminology (CVX)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Maternity / pregnancy care (pregnancy history, EDD, prenatal visits, delivery, lactation, high-risk flags)",
+        "taxonomy_id": "healthcare.care.maternity-care",
+        "local_maturity": "absent",
+        "best_source": [
+          "maternity-tracker (pregnancy history, EDD, baby/fetus, lactation, outcomes, high-risk flags, outreach)",
+          "openhospital-api (DeliveryType/PregnantTreatment)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Pregnancy history, EDD/gestational-age calc, fetus/baby records, lactation, delivery outcomes, high-risk flags, outreach call log preserved.",
+        "target_local": "absent (best owner = healthstack-careplans-service maternity vertical or new healthstack-maternity-service)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Surgery / procedure checklist (pre-procedural checklist, surgical safety, operation scheduling)",
+        "taxonomy_id": "healthcare.care.surgery-procedure-checklist",
+        "local_maturity": "absent",
+        "best_source": [
+          "preproc-checklist (pre-procedural checklist + temporal logic engine)",
+          "openhospital-api (Operation)",
+          "vista-m (Surgery File 413)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Checklist templates, per-patient assignment, conditional/temporal item visibility, item-component ranges/states, completion tracking preserved.",
+        "target_local": "absent (best owner = orders-service procedure + builder-core checklist + workflow-core)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Clinical Decision Support (reminders, risk models, contraindication checks, disease summaries)",
+        "taxonomy_id": "healthcare.care.clinical-decision-support",
+        "local_maturity": "absent",
+        "best_source": [
+          "vista-m (Reminders File 801)",
+          "asrcm (surgical risk model engine)",
+          "RAPTOR (contraindication rules)",
+          "bahmni-core (disease summary/trends)",
+          "aware (CPRS CDS)",
+          "ehmp-app (cds_advice)",
+          "openmrs-fhir2 (Task)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Reminder definitions, risk-model terms/scoring, contraindication rules, disease-summary trends, alert override-per-document-type, chart-context CDS all preserved.",
+        "target_local": "absent (best owner = healthstack-quality-service rules+CDS + builder-core + workflow-core)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Clinical rules engine (table-driven rules, cohort scoping, temporal logic, rule authoring UI)",
+        "taxonomy_id": "healthcare.care.rules-engine",
+        "local_maturity": "stub",
+        "best_source": [
+          "vista-dashboard-rules (C9C RULES ENGINE + authoring UI)",
+          "preproc-checklist (temporal logic ExecuteLogic)",
+          "aware (knowledge-base editor)"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Table-driven rule definitions, cohort scoping, temporal logic, per-document-type override, authoring UI preserved.",
+        "target_local": "builder-core-service (rules) + workflow-core-service (shared with CDS)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Clinical alerts / notifications (abnormal-result alerts, high-risk flags, escalation, knowledge-base alert types)",
+        "taxonomy_id": "healthcare.care.alerts",
+        "local_maturity": "present-weak",
+        "best_source": [
+          "aware (alert monitoring + escalation + KB editor)",
+          "maternity-tracker (high-risk flagging)",
+          "vista-dashboard-rules (reminders bridge)",
+          "openmrs-distro (task follow-up)"
+        ],
+        "integration_mode": "pattern-reference-only",
+        "generator_first_target": "asyncapi-event",
+        "no_loss_check": "Alert types, escalation timestamps/chain, acknowledgment, high-risk flagging, KB-editable alert definitions preserved.",
+        "target_local": "notify-service + tasks-core-service (+ rules/CDS for generation)"
+      },
+      {
+        "domain": "healthcare-clinical",
+        "feature": "Ward / bed management (wards, beds, bed assignment, occupancy board)",
+        "taxonomy_id": "healthcare.inpatient.ward-bed-management",
+        "local_maturity": "absent",
+        "best_source": [
+          "openhospital-api (Ward)",
+          "openmrs-distro (Bed/Ward/BedAssignment)",
+          "openhospital-ui/gui"
+        ],
+        "integration_mode": "port-adapt",
+        "generator_first_target": "contract-typespec",
+        "no_loss_check": "Ward, bed, bed-assignment, occupancy/availability, bed-type/status preserved.",
+        "target_local": "absent (best owner = healthstack-patient-service ward/bed slice or new inpatient slice)"
+      }
+    ]
+  }
+}

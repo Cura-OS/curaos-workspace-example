@@ -1,0 +1,198 @@
+{
+  "_comment": "CANONICAL authored brochure copy for curaos.example.com. PUBLIC product brochure (no PHI, no tenant data). This workspace mirror is the canonical authoring source per the repo-boundary rule; scripts/build.sh on the box resolves --content-dir to the repo copy (curaos/curaos-website/content/site.json), which is kept byte-synced with this file. examples/site-content/site.json is a MINIMAL build/test fixture only. Copy here is the OpenDesign Marketing Redesign (project curaos-marketing) reworded to current live reality and folded into the renderer schema: every renderer-consumed field (siteName, tagline, eyebrow, headline, subhead, positioning, description, pillars[], architecture, deployProfiles[], status, quickstart, footer) is enriched; extra authoring keys (stats, apps, capabilities, demoLinks, getStarted) are retained for the doc graph and future renderer growth even though the current renderer ignores them. Every claim is verified against the CuraOS charter (AGENTS.md) and what is actually live: 22 frontend app projects, 20 web apps in the local render gate, 19 public vanity web hosts, and 38 routed backend services exposing 83 generated gateway domains. Capability claims that are not yet GA are framed as design intent, not shipped. Zero em-dashes or en-dashes (binding rule). App and demo hrefs are literal https URLs (the live hosts); docs/releases/demo use {docsUrl}/{releasesUrl}/{demoUrl} tokens resolved from the same build flags as the hero CTAs.",
+  "siteName": "CuraOS",
+  "tagline": "Composable, self-hosted-first care platform",
+  "eyebrow": "Care Oriented Stack",
+  "headline": "The care platform you actually own",
+  "subhead": "A composable, self-hosted-first stack: a generic neutral core with opt-in overlays for health, education, and ERP. Twenty-two frontend app projects and 38 routed backend services run right now, self-hosted on Kubernetes, composed from one codebase and one shared design system. It deploys to cloud, on-prem, hybrid, or fully air-gapped.",
+  "positioning": "Self-hosted first. Event-led. Multi-tenant from one codebase. No managed-cloud lock-in.",
+  "description": "CuraOS is a composable, self-hosted-first platform: a generic neutral core with opt-in vertical overlays (Health, Education, ERP). It runs today as 22 frontend app projects on a shared design system and 38 routed backend services on self-hosted Kubernetes, with single sign-on through Pocket-ID, and is designed to deploy across cloud, on-prem, hybrid, and air-gapped targets. CuraOS is in active development (pre-1.0); the deployment profiles and overlay depth harden along the roadmap.",
+  "stats": [
+    { "value": "22", "label": "frontend app projects" },
+    { "value": "38", "label": "routed backend services" },
+    { "value": "4", "label": "deployment targets" },
+    { "value": "0", "label": "external calls in air-gap" }
+  ],
+  "pillars": [
+    { "icon": "shield", "title": "Self-hosted first", "blurb": "You run it on your own infrastructure, inside your own network boundary. Managed cloud is an option, never a requirement, and there is no lock-in to leave behind." },
+    { "icon": "layers", "title": "Generic before vertical", "blurb": "The core stays domain-neutral and reusable. Health, education, and ERP arrive as overlays that depend on the core through documented seams; they never fork it." },
+    { "icon": "bolt", "title": "Event-led", "blurb": "Services talk over durable, versioned events first and sync APIs second. State changes stay observable, replayable, and auditable, so the system stays loosely coupled by design." },
+    { "icon": "building", "title": "Multi-tenant", "blurb": "Tenant isolation is a core boundary, not a setting. PHI and PII live in overlay schemas scoped per tenant and never bleed into the neutral core. SaaS, on-prem, and hybrid all run from one codebase." },
+    { "icon": "blocks", "title": "Builder-led", "blurb": "A workflow and BPM engine plus an app and site builder. Operators compose flows and surfaces against documented seams instead of forking the platform." },
+    { "icon": "puzzle", "title": "Composable", "blurb": "Services, libraries, and clients ship independently and combine per tenant and per market. Opt into the verticals you need; each overlay is additive on a shared foundation, not a separate fork." }
+  ],
+  "apps": {
+    "caption": "Twenty-two app projects, one design system",
+    "intro": "The suite tracks 22 frontend app projects: 20 web apps plus 2 Expo mobile apps. Nineteen web apps are reachable today on public vanity hosts; Builder Studio is a cluster web app without a public vanity host. Sign-in is OIDC through Pocket-ID, brokered by the identity service into a CuraOS session. Dark mode and right-to-left Arabic are built in and persist across reloads.",
+    "groups": [
+      {
+        "icon": "blocks",
+        "heading": "Platform",
+        "blurb": "Operate and build the system itself",
+        "apps": [
+          { "projectSlug": "admin-app", "name": "Admin", "blurb": "Tenant, identity, and platform administration console.", "href": "https://admin.example.com" },
+          { "projectSlug": "workflow-designer", "name": "Builder", "blurb": "Low-code app and site builder that generates surfaces from BPM and domain contracts.", "href": "https://builder.example.com" },
+          { "projectSlug": "front-office", "name": "Front office", "blurb": "Staff-facing operations desk: tasks, scheduling, and day-to-day workflows.", "href": "https://front-office.example.com" },
+          { "projectSlug": "fleet-manager", "name": "Fleet", "blurb": "Vehicle and asset fleet tracking and dispatch.", "href": "https://fleet.example.com" },
+          { "projectSlug": "hosted-login", "name": "Login", "blurb": "Shared OIDC sign-in surface (Authorization Code with PKCE via Pocket-ID).", "href": "https://login.example.com" }
+        ]
+      },
+      {
+        "icon": "blocks",
+        "heading": "Cluster and mobile",
+        "blurb": "Tracked app projects without public vanity hosts",
+        "apps": [
+          { "projectSlug": "builder-studio", "name": "Builder Studio", "blurb": "Cluster web app for generated builder workflows and site publishing." },
+          { "projectSlug": "clinician-app", "name": "Clinician app", "blurb": "Expo mobile clinical workflow shell." },
+          { "projectSlug": "patient-app", "name": "Patient app", "blurb": "Expo mobile patient workflow shell." }
+        ]
+      },
+      {
+        "icon": "briefcase",
+        "heading": "Business suite",
+        "blurb": "Run an organization",
+        "apps": [
+          { "projectSlug": "business-workflow", "name": "Business workflow", "blurb": "Design and run org-level BPM workflows and approvals.", "href": "https://biz-workflow.example.com" },
+          { "projectSlug": "business-automation", "name": "Business automation", "blurb": "Low-code automation: connectors, actions, and scheduling.", "href": "https://biz-automation.example.com" },
+          { "projectSlug": "business-site", "name": "Business site", "blurb": "Build and publish public-facing organization sites.", "href": "https://biz-site.example.com" },
+          { "projectSlug": "business-shop", "name": "Business shop", "blurb": "Commerce and storefront for an organization.", "href": "https://biz-shop.example.com" },
+          { "projectSlug": "business-donation", "name": "Business donation", "blurb": "Donation campaigns and fundraising for an organization.", "href": "https://biz-donation.example.com" }
+        ]
+      },
+      {
+        "icon": "user",
+        "heading": "Personal suite",
+        "blurb": "For an individual",
+        "apps": [
+          { "projectSlug": "personal-workflow", "name": "My workflow", "blurb": "Personal workflows and task pipelines.", "href": "https://my-workflow.example.com" },
+          { "projectSlug": "personal-automation", "name": "My automation", "blurb": "Personal low-code automations and connectors.", "href": "https://my-automation.example.com" },
+          { "projectSlug": "personal-tasks", "name": "My tasks", "blurb": "Personal task and to-do management.", "href": "https://my-tasks.example.com" },
+          { "projectSlug": "personal-calendar", "name": "My calendar", "blurb": "Personal calendar and scheduling.", "href": "https://my-calendar.example.com" },
+          { "projectSlug": "personal-notes", "name": "My notes", "blurb": "Personal notes and documents.", "href": "https://my-notes.example.com" },
+          { "projectSlug": "personal-tracking", "name": "My tracking", "blurb": "Personal location and asset tracking.", "href": "https://my-tracking.example.com" },
+          { "projectSlug": "personal-site", "name": "My site", "blurb": "Build and publish a personal site.", "href": "https://my-site.example.com" },
+          { "projectSlug": "personal-shop", "name": "My shop", "blurb": "Personal storefront and commerce.", "href": "https://my-shop.example.com" },
+          { "projectSlug": "personal-donation", "name": "My donation", "blurb": "Personal donation and fundraising pages.", "href": "https://my-donation.example.com" }
+        ]
+      }
+    ]
+  },
+  "capabilities": {
+    "caption": "The platform underneath",
+    "intro": "Every app sits on the same foundation. The neutral core provides reusable capabilities; vertical overlays extend it. Behavior is built, not forked. The current local reference stack routes 38 backend services through the gateway and exposes 83 generated `/api/v1` domains.",
+    "items": [
+      { "icon": "workflow", "title": "Workflow and BPM core", "blurb": "Orchestrates human tasks, automation, and SLA timing. Every domain routes through it, so process logic lives in one place." },
+      { "icon": "blocks", "title": "App and site builder", "blurb": "Generates admin, ops, and external surfaces from BPM definitions, domain contracts, and shared theming." },
+      { "icon": "wrench", "title": "Automation core", "blurb": "Low-code actions, connectors, and scheduling so integrations and routine work are configured rather than coded." },
+      { "icon": "grid", "title": "Neutral capabilities", "blurb": "Identity, tenancy, party, audit, notify, search, reports, storage, calendar, tasks, documents, commerce, and more, all vertical-agnostic." },
+      { "icon": "puzzle", "title": "Vertical overlays", "blurb": "HealthStack (patient, encounter, clinical, consent, interop) plus Education and ERP, extending the core through documented seams." },
+      { "icon": "network", "title": "Versioned contracts", "blurb": "APIs and durable events carry versioned schemas with deprecation windows, so services evolve without breaking consumers." }
+    ]
+  },
+  "architecture": {
+    "coreLabel": "Neutral core",
+    "overlays": ["HealthStack", "EducationStack", "ERP"],
+    "caption": "Dependency points downward, always. Every overlay builds on the neutral core; the core never reaches up into a vertical. That invariant is what keeps tenant data boundaried and lets a deployment run health, education, and ERP side by side, or none of them, without forking. Underneath, CuraOS runs as composable services on Kubernetes with CNPG Postgres, Valkey, and event-led messaging; the public edge is fronted by Caddy and Cloudflare."
+  },
+  "deployProfiles": [
+    { "icon": "cloud", "name": "Cloud SaaS", "blurb": "Hosted multi-tenant for teams that want managed convenience. The same binaries you can pull on-prem the day you want out, with per-tenant isolation and horizontal scale." },
+    { "icon": "server", "name": "On-prem", "blurb": "Runs entirely inside your data center or VPC on self-hosted Kubernetes, with overlays opt-in: your identity provider, your network policy, your backup story. This is how the live deployment runs today." },
+    { "icon": "split", "name": "Hybrid", "blurb": "Keep regulated workloads inside your boundary while bursting non-sensitive services out. The vendor runs the control plane; your data plane, audit, and secrets stay on your infrastructure, and the event bus spans both sides." },
+    { "icon": "lock", "name": "Home lab / air-gap", "blurb": "Zero-egress and fully offline, designed for zero external calls: no phone-home, no CDN. Zero-egress is already proven for the platform's own infrastructure and this very site, not yet for a full product tenant." }
+  ],
+  "status": {
+    "caption": "What is real today, what is on the roadmap",
+    "intro": "CuraOS is in active development (pre-1.0). We label shipped capability and planned capability separately, on purpose. Nothing below is dressed up as more finished than it is, and we would rather under-claim. Scaffolded means the service exists and runs, not that every feature is complete. Counts reflect current buildout and will change.",
+    "columns": [
+      {
+        "heading": "Real today",
+        "items": [
+          "22 frontend app projects on one design system: 20 web apps plus 2 Expo mobile apps",
+          "19 public vanity web hosts and 20 local web apps exercised by the real-data render gate",
+          "38 routed backend services exposing 83 generated gateway domains",
+          "OIDC sign-in (Authorization Code with PKCE) through Pocket-ID, brokered by the identity service into a CuraOS session",
+          "Workflow and BPM core, app and site builder, and automation core in place",
+          "Neutral core plus overlay model with the downward dependency invariant holding, and PHI/PII scoped to overlay schemas",
+          "Air-gap zero-egress proven for the platform's own infrastructure and this site"
+        ]
+      },
+      {
+        "heading": "On the roadmap",
+        "items": [
+          "1.0 stabilization: frozen APIs, upgrade guarantees, and semantic versioning",
+          "Full domain depth inside each service, from scaffold to feature-complete",
+          "A shipped curaos installer and CLI; the quickstart below is illustrative, not yet released",
+          "A public, self-serve multi-tenant demo tenant and hosted sandbox",
+          "GA hardening of the cloud, hybrid, and air-gap deployment profiles, with air-gap zero-egress proven end to end for a full product tenant",
+          "Education and ERP overlays brought to parity with HealthStack",
+          "Compliance attestations packaged per deployment profile"
+        ]
+      }
+    ]
+  },
+  "demoLinks": {
+    "caption": "See it running",
+    "intro": "These are live, reachable surfaces, not screenshots. Sign-in is OIDC through Pocket-ID; some apps require an account. The routed backend stack exposes 83 generated gateway domains behind `https://api.example.com/api/v1`.",
+    "links": [
+      { "label": "Admin console", "href": "https://admin.example.com", "blurb": "Platform administration" },
+      { "label": "App and site builder", "href": "https://builder.example.com", "blurb": "Build a surface" },
+      { "label": "Front office", "href": "https://front-office.example.com", "blurb": "Operations desk" },
+      { "label": "API gateway", "href": "https://api.example.com", "blurb": "83 generated domains" },
+      { "label": "Documentation", "href": "{docsUrl}", "blurb": "Install, integrate, operate" },
+      { "label": "Source on GitHub", "href": "https://github.com/your-org", "blurb": "Open source org" }
+    ]
+  },
+  "quickstart": {
+    "caption": "The shape of a self-hosted bring-up",
+    "lines": [
+      "# illustrative: the CLI is on the roadmap, not yet shipped (pre-1.0)",
+      "$ curaos init acme --profile air-gap --no-egress",
+      "# pulls nothing from the network; uses the local bundle",
+      "$ curaos core up",
+      "  event-bus        ready",
+      "  identity         ready",
+      "  tenancy          ready",
+      "  workflow-engine  ready",
+      "$ curaos overlay enable healthstack --tenant acme",
+      "  # PHI schema provisioned, scoped to tenant: acme",
+      "  healthstack      enabled",
+      "$ curaos status",
+      "  core: healthy   overlays: 1   egress: none",
+      "ok: acme composed from the neutral core plus the overlays you need"
+    ]
+  },
+  "getStarted": {
+    "caption": "Run it on your own infrastructure",
+    "body": "CuraOS deploys to Kubernetes with CNPG Postgres, Valkey, and an ingress controller. The full self-host walkthrough, including OIDC setup and the service catalog, lives in the docs. The commands below are illustrative of the target flow.",
+    "lines": [
+      "$ git clone https://github.com/your-org/curaos",
+      "$ helm install curaos ./ops/charts/umbrella   # illustrative",
+      "ok: neutral core up; add overlays per tenant"
+    ]
+  },
+  "footer": {
+    "_comment": "Deploy-variable hrefs use {docsUrl}/{demoUrl}/{releasesUrl} tokens resolved from the same build flags as the hero CTAs, so header and footer share one source of truth. Static links (GitHub org, live apps) stay literal.",
+    "columns": [
+      { "heading": "Product", "links": [
+        { "label": "Documentation", "href": "{docsUrl}" },
+        { "label": "Releases", "href": "{releasesUrl}" },
+        { "label": "Charter", "href": "{docsUrl}" }
+      ]},
+      { "heading": "Apps", "links": [
+        { "label": "Admin", "href": "https://admin.example.com" },
+        { "label": "Builder", "href": "https://builder.example.com" },
+        { "label": "Front office", "href": "https://front-office.example.com" },
+        { "label": "Fleet", "href": "https://fleet.example.com" }
+      ]},
+      { "heading": "Platform", "links": [
+        { "label": "API gateway", "href": "https://api.example.com" },
+        { "label": "Sign in", "href": "https://login.example.com" }
+      ]},
+      { "heading": "Project", "links": [
+        { "label": "GitHub", "href": "https://github.com/your-org" },
+        { "label": "Releases", "href": "{releasesUrl}" }
+      ]}
+    ],
+    "note": "CuraOS is independent software you self-host: a composable, self-hosted-first care platform, in active development (pre-1.0). No managed-cloud lock-in."
+  }
+}

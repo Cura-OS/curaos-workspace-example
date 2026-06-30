@@ -1,0 +1,16 @@
+#!/bin/sh
+# Fail-closed hook (RP-10): Conventional Commits + AI-attribution-trailer ban
+# must not silently no-op when the runner is missing.
+# Escape hatch: LEFTHOOK=0 skips (lefthook convention), emergencies only.
+[ "$LEFTHOOK" = "0" ] && exit 0
+if [ -n "$LEFTHOOK_BIN" ]; then
+  exec "$LEFTHOOK_BIN" run commit-msg "$@"
+fi
+if command -v lefthook >/dev/null 2>&1; then
+  exec lefthook run commit-msg "$@"
+fi
+if command -v bun >/dev/null 2>&1; then
+  exec bun x lefthook@2.1.8 run commit-msg "$@"
+fi
+echo "commit-msg: no lefthook runner (set LEFTHOOK_BIN, brew install lefthook, or install bun); failing closed" >&2
+exit 1

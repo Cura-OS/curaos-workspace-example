@@ -1,0 +1,26 @@
+{
+  "tool": "gh-call-ledger",
+  "mode": "per-issue",
+  "generatedAt": "2026-06-10T04:03:15.323Z",
+  "counts": {
+    "api repos/:owner/:repo/issues/:n/parent": 100,
+    "issue view --comments": 100,
+    "issue view --json": 100
+  },
+  "totals": {
+    "all": 300,
+    "graphql": 0,
+    "rest": 100,
+    "cli": 200
+  },
+  "scenario": {
+    "name": "issue-read-100",
+    "issueCount": 100,
+    "repoCount": 10,
+    "org": "scenario-org",
+    "wavePhases": [
+      "triage-read"
+    ],
+    "resolved": 100
+  }
+}

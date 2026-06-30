@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "RP-60: incremental mutation testing scoped to the committed workflow executors. Opt-in via `just mutate`; NOT part of the default `just ci` gate. Command: scripts/check-workflow-sync.test.js only. scripts/workflow-truth-contract.test.js is instrumentation-incompatible BY DESIGN: it asserts on raw executor source (meta-first guard requires `export const meta` as the literal first statement, and extractFunction snippets reference Stryker helpers injected at file top), so it fails every sandbox dry run; see .scratch/integration-queue/rp-60.md for the queued follow-up. babel.config.cjs supplies allowReturnOutsideFunction for the dual-runtime executor dialect (export const meta + top-level return). Incremental state + sandbox live under the already-gitignored .cache/.",
+  "mutate": ["scripts/workflows/**/*.workflow.js"],
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "bun test scripts/check-workflow-sync.test.js"
+  },
+  "incremental": true,
+  "incrementalFile": ".cache/stryker-incremental.json",
+  "tempDirName": ".cache/stryker-tmp",
+  "coverageAnalysis": "off",
+  "disableTypeChecks": false,
+  "concurrency": 4,
+  "reporters": ["clear-text", "progress"],
+  "ignorePatterns": [
+    "/curaos",
+    "/curaos.bak",
+    "/ai",
+    "/.cache",
+    "/.scratch",
+    "/.worktrees",
+    "/.claude",
+    "/.codegraph",
+    "/.agent-workflow-kit",
+    "/.github",
+    "/.cursor",
+    "/.vscode",
+    "/.pi",
+    "/.out-of-scope"
+  ]
+}

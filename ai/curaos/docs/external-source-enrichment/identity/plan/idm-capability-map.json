@@ -1,0 +1,965 @@
+{
+  "pocket_id_cutover": {
+    "title": "Retire pocket-id: stand up CuraOS-native OIDC/OAuth2 provider in identity-service and switch the broker to our own issuer",
+    "current_state_summary": "identity-service is a strong AUTHENTICATION service (login, password+argon2+HIBP, WebAuthn/passkey, DPoP, refresh-sessions in Valkey+PG, break-glass, MFA factors, recovery codes, consents, data-export/deletion self-service, RBAC admin) that signs ES256 first-party CuraOS tokens. It is NOT an OIDC/OAuth2 PROVIDER: no /authorize, no /.well-known/openid-configuration, no exposed JWKS endpoint, no OAuth client registry, no consent-screen flow, no /token grant_type machinery, no /userinfo, no introspection/revocation. The 19-22 FE apps log in against pocket-id (auth.example.com) and the broker (src/auth/oidc-broker/*) only VALIDATES pocket-id id_tokens and re-mints CuraOS tokens. pocket-id is therefore the relying-party-facing OIDC PROVIDER we must replace; the broker is the bridge we must repoint at our own provider then delete.",
+    "recommended_provider_core": "node-oidc-provider (Logto's fork choice; pure TS, fits Bun+NestJS) wrapped as a NestJS module inside identity-service, backed by a Drizzle/Postgres adapter (Citus tenant-scoped via nid column). Logto is the closest stack-fit corpus: mine packages/core/src/oidc/* (adapter.ts, grants/*, scope.ts, extra-token-claims.ts, resource.ts, init.ts) as the port-adapt template. Ory-Hydra-as-service is the fallback if certification risk demands it (it is the cleanest 'no user management, headless provider' separation - identity-service already speaks its challenge/verifier pattern via login/consent accept), but it is a Go service-boundary add that breaks the single-stack/single-binary Bun-compile charter, so it is the alternative-in-ADR, not the default.",
+    "parity_checklist": [
+      {
+        "capability": "OIDC discovery (/.well-known/openid-configuration) + JWKS endpoint (/.well-known/jwks.json)",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "ES256 key handling + JWKS-capable key material exists in login-token.service.ts (importJWK/exportJWK/calculateJwkThumbprint, kid in protected header) but NO public discovery or JWKS HTTP endpoint is exposed; platform-bearer-verifier reads a static CURAOS_JWT_ES256_PUBLIC_JWK env, not a published JWKS.",
+        "work_to_parity": "Add provider well-known + JWKS routes via node-oidc-provider; expose the existing ES256 keyset; add key-rotation window. Generator-first: emit the discovery/JWKS contract in auth.tsp.",
+        "owner": "identity-service (new oidc-provider module)"
+      },
+      {
+        "capability": "Authorization endpoint (/authorize) - code flow + PKCE (mandatory for public), id_token response types",
+        "pocket_id_has": true,
+        "local_maturity": "absent",
+        "evidence": "No /authorize route anywhere in src/ (grep confirmed); login is a direct POST /auth/login returning tokens, not a browser authorization redirect flow.",
+        "work_to_parity": "Add node-oidc-provider authorization handler; bridge its interaction (login+consent) to the existing login-user.service + webauthn + MFA. hosted-login renders the interaction pages.",
+        "owner": "identity-service + hosted-login"
+      },
+      {
+        "capability": "Token endpoint (/token) - authorization_code, refresh_token, device_code, client_credentials",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "Token MINTING (ES256, DPoP cnf binding, refresh-session rotation) is fully built in login-token.service.ts + refresh-session.service.ts, but it is NOT exposed as an OAuth /token endpoint with grant_type dispatch; refresh is a bespoke POST /auth/refresh.",
+        "work_to_parity": "Wire node-oidc-provider token grants to reuse the existing token-signing + refresh-session store as the adapter backend. Add device_code + client_credentials grants. Keep DPoP.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "Userinfo endpoint + token introspection (RFC 7662) + revocation (RFC 7009)",
+        "pocket_id_has": true,
+        "local_maturity": "absent",
+        "evidence": "No /userinfo, /introspect, /revoke routes. Account profile exists at /account/profile but is not the OIDC userinfo claim shape.",
+        "work_to_parity": "node-oidc-provider provides all three; map claims from existing user model + @curaos/policy roles via a claims/scope mapper (mine Logto scope.ts + extra-token-claims.ts).",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "End-session / RP-initiated logout (+ front/back-channel logout)",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "POST /auth/logout + session revocation exist but as first-party session kill, not OIDC end_session with id_token_hint or back-channel logout to clients.",
+        "work_to_parity": "Add OIDC end-session handler; cascade to refresh-session revocation; add backchannel_logout_uri per client.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "OIDC client (relying-party) management - CRUD, secret rotation, PKCE flag, callback/logout URLs, skip-consent, group restriction",
+        "pocket_id_has": true,
+        "local_maturity": "absent",
+        "evidence": "No OidcClient model, no /oidc/clients routes, no client secret hashing. admin.controller.ts only manages users + roles.",
+        "work_to_parity": "New oidc_clients table + CRUD admin routes + secret hashing (argon2, reuse password-hasher). Seed the 19-22 FE apps + the broker consumer as clients. Generator-first: emit per-client registration into the contract.",
+        "owner": "identity-service (new pkg @curaos/oidc-clients or in-service)"
+      },
+      {
+        "capability": "Device authorization flow (RFC 8628) - device_code + user_code + verification UI",
+        "pocket_id_has": true,
+        "local_maturity": "absent",
+        "evidence": "No device endpoints.",
+        "work_to_parity": "node-oidc-provider device flow + a verification page in hosted-login.",
+        "owner": "identity-service + hosted-login"
+      },
+      {
+        "capability": "PAR - pushed authorization requests",
+        "pocket_id_has": true,
+        "local_maturity": "absent",
+        "evidence": "No PAR endpoint.",
+        "work_to_parity": "Enable node-oidc-provider PAR feature.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "Federated client authentication (private_key_jwt / client_assertion JWT bearer + JWKS cache + JTI replay)",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "JTI replay infrastructure exists (dpop-replay-store.ts); JWKS-fetch + verify exists in oidc-broker (createRemoteJWKSet + jwtVerify). No client_assertion auth method.",
+        "work_to_parity": "node-oidc-provider supports client_secret_jwt + private_key_jwt natively; reuse dpop-replay-store pattern for client-assertion JTI dedup.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "WebAuthn/Passkey registration + login + credential mgmt (list/rename/delete) + device state",
+        "pocket_id_has": true,
+        "local_maturity": "have",
+        "evidence": "Full implementation: webauthn-registration.service.ts, webauthn-authentication.service.ts, webauthn-policy.service.ts, credential routes (register/options+verify, authenticate/options+verify, recovery, delete) in auth.controller.ts.",
+        "work_to_parity": "None for primitives. Surface passkey as an interaction step inside the new /authorize flow (currently only reachable via direct POST). Add rename/label (pocket-id has it).",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "User model: username, email(optional), names, displayName, locale, admin flag, disabled, ldapId, custom claims, profile picture",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "User model + roles + account profile + consents exist; custom-claims (per-user/per-group KV injected into tokens), ldapId, profile-picture upload are not confirmed present.",
+        "work_to_parity": "Add custom_claims table (per-user + per-group) + claims mapper; add profile-picture upload (route to @curaos/storage); add ldapId column for federation linkage.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "User groups (membership, per-group custom claims, group-gated client access, ldapId)",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "RBAC roles exist (rbac-policy.service.ts, role assign/revoke) but pocket-id 'user groups' (coarse membership + allowedOidcClients gating + per-group claims) is a distinct concept not modeled.",
+        "work_to_parity": "Model groups as either RBAC role-groups or B2B org-roles; add allowed_user_groups gate on oidc_clients. Reshape to org membership (see capability_map org model).",
+        "owner": "identity-service + @curaos/policy"
+      },
+      {
+        "capability": "One-time access tokens (admin + self-service, email delivery) + signup tokens (time/usage-limited, default group/claims)",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "Registration tokens exist (registration-tenant-resolver.ts, registration-store.ts 29KB) and tenant-scoped registration; password-reset + recovery-codes in account.controller.ts. pocket-id signup-token usage-limit/usage-count + one-time-access-email request-while-unauthenticated may be incomplete.",
+        "work_to_parity": "Extend registration tokens with usageLimit/usageCount + default-claims; add unauthenticated one-time-access-email request endpoint + email delivery via @curaos/providers EmailProvider.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "Email verification (send + verify + emailVerified flag)",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "Account self-service surface is broad but a dedicated send-verification/verify-email + emailVerified flag is not confirmed in routes (account has password-reset, not email-verify).",
+        "work_to_parity": "Add email-verification token + send/verify routes (EmailProvider) + emailVerified column surfaced as a claim.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "Initial admin setup (passwordless/passkey-based bootstrap)",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "break-glass + seeded operator->alpha tenant tenant-admin default in broker config; a first-run passkey admin-setup flow is not explicit.",
+        "work_to_parity": "Add a one-shot /setup that registers the first admin via passkey, then locks; reuse break-glass audit.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "API keys (personal access tokens) - scoped, expiry, lastUsedAt, expiration email",
+        "pocket_id_has": true,
+        "local_maturity": "absent",
+        "evidence": "No api-keys table/routes; platform-bearer-verifier is for service tokens not user PATs.",
+        "work_to_parity": "Add api_keys table + CRUD + middleware (mine pocket-id apikey/* and supertokens). client_credentials grant may cover machine-to-machine; user PAT still needed.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "Audit logging (event, user, UA, IP, geo, JSON data) + query API",
+        "pocket_id_has": true,
+        "local_maturity": "have",
+        "evidence": "Rich audit: identity-core/audit/*, auth-audit-publisher.ts (14KB), tamper-evident hash-chain per architecture_notes, event-led outbox. Geo enrichment (GeoLite2) is the only pocket-id extra not confirmed.",
+        "work_to_parity": "Add optional geo enrichment (provider); ensure OIDC provider events (authorize/consent/token) feed the existing audit chain.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "LDAP sync (users/groups/membership, attribute mapping, soft-delete, admin-group detection)",
+        "pocket_id_has": true,
+        "local_maturity": "absent",
+        "evidence": "No LDAP code; ldapId column not present.",
+        "work_to_parity": "See gaps: new federation adapter (mine authentik sources/ldap + keycloak federation/ldap as reference). Polling sync via scheduler + @curaos/providers.",
+        "owner": "new pkg @curaos/identity-federation"
+      },
+      {
+        "capability": "SCIM service-provider config + sync trigger",
+        "pocket_id_has": true,
+        "local_maturity": "absent",
+        "evidence": "No SCIM. pocket-id itself is only an integration point (no full SCIM API).",
+        "work_to_parity": "Defer to v1.1; full SCIM 2.0 (mine zitadel internal/api/scim + keycloak scim/* for full CRUD). pocket-id parity needs only the config+trigger stub.",
+        "owner": "new pkg @curaos/identity-scim"
+      },
+      {
+        "capability": "Sessions (OAuth2 session store: codes/tokens/device/PAR + interaction sessions + 30-day refresh)",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "refresh-session.service.ts + valkey-refresh-session-store.ts (21KB) + refresh-session-store.ts (13KB) are production-grade for refresh sessions; OAuth2 code/interaction session store does not exist (no provider).",
+        "work_to_parity": "node-oidc-provider Drizzle adapter persists codes/grants/interaction/device/PAR; reuse existing refresh-session store as the refresh-token backend so revocation/listing stays unified.",
+        "owner": "identity-service"
+      },
+      {
+        "capability": "App configuration (40+ KV vars: SMTP, signup, feature toggles, branding)",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "Unleash feature flags (tenancy), @curaos/secrets for secrets, @curaos/providers for SMTP. A unified per-tenant app-config KV store is not modeled.",
+        "work_to_parity": "Add per-tenant oidc/sign-in-experience config (mine Logto sign-in-experience). Branding -> theming.",
+        "owner": "identity-service + tenancy"
+      },
+      {
+        "capability": "Admin console (clients, users, groups, claims, app-config, audit viewer)",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "admin.controller.ts covers users+roles only; hosted-login has account/settings UI. No client-mgmt/audit-viewer admin UI.",
+        "work_to_parity": "Extend admin API + a CuraOS admin app (generator emitUiApp) for clients/groups/claims/audit. Person+tenant-centric: org-admin scope, not global.",
+        "owner": "identity-service + new frontend admin app"
+      },
+      {
+        "capability": "Account self-service console (profile, passkeys, authorized-clients view/revoke, API keys, email verify, one-time access)",
+        "pocket_id_has": true,
+        "local_maturity": "have",
+        "evidence": "account.controller.ts is the broadest surface in the repo (profile, mfa, password-reset, recovery-codes, sessions, trusted-devices, consents, data-export, deletion-request, security-overview, recommendations, activity) + hosted-login UI.",
+        "work_to_parity": "Add authorized-OIDC-clients list + revoke (needs provider grant store) + API-keys panel + email-verify. Already exceeds pocket-id on GDPR (data-export/deletion).",
+        "owner": "identity-service + hosted-login"
+      },
+      {
+        "capability": "Login/signup/consent/device UI flow",
+        "pocket_id_has": true,
+        "local_maturity": "partial",
+        "evidence": "hosted-login renders sign-in/account/settings (real-working) but NO consent screen, NO authorize-interaction page, NO device-verification page (no provider to drive them).",
+        "work_to_parity": "Add interaction routes in hosted-login driven by node-oidc-provider interaction API: consent, account-selection, reauth, device.",
+        "owner": "hosted-login"
+      },
+      {
+        "capability": "Rate limiting (login, one-time-access, webauthn verify, signup)",
+        "pocket_id_has": true,
+        "local_maturity": "have",
+        "evidence": "login-lockout.service.ts + login-lockout-store.ts; webauthn login finish rate-limited per pocket-id parity intent.",
+        "work_to_parity": "Extend lockout to new authorize/token/one-time-access endpoints.",
+        "owner": "identity-service"
+      }
+    ],
+    "cutover_steps": [
+      {
+        "step": 1,
+        "name": "Author OIDC provider contracts (generator-first)",
+        "detail": "Extend specs/auth.tsp + auth.asyncapi.yaml with the provider surface: discovery, JWKS, /authorize, /token (grant_type union), /userinfo, /introspect, /revoke, /end-session, /device, /par, and oidc_clients CRUD. Regenerate @curaos/identity-sdk. This is where the feature lands FIRST per generator-evolution-rule.",
+        "gate": "tsp compiles, SDK regenerates, contract review"
+      },
+      {
+        "step": 2,
+        "name": "Stand up the provider module behind a flag",
+        "detail": "Add a NestJS oidc-provider module wrapping node-oidc-provider with a Drizzle adapter (nid/tenant-scoped). Reuse existing ES256 keyset (login-token.service), refresh-session store (refresh-token backend), DPoP, webauthn + MFA + lockout as the interaction implementations. Port-adapt Logto packages/core/src/oidc/* (adapter, grants, scope, extra-token-claims). Ship dark (feature flag CURAOS_OWN_OIDC=off).",
+        "gate": "provider boots; discovery+JWKS serve; conformance smoke (authorization_code+PKCE round-trip) green locally"
+      },
+      {
+        "step": 3,
+        "name": "Build interaction UI in hosted-login",
+        "detail": "Add authorize-interaction, consent, account-selection, reauth, and device-verification pages driven by the provider interaction API. Wire to existing login/webauthn/MFA. Person-centric: consent screen shows the person exactly what each client gets and lets them revoke later.",
+        "gate": "full browser code-flow login through hosted-login works locally with real data"
+      },
+      {
+        "step": 4,
+        "name": "Register clients + migrate",
+        "detail": "Seed oidc_clients for the 19-22 FE apps + the broker consumer (same client_ids/redirect_uris pocket-id used so nothing changes for the apps). Migrate users: pocket-id users are already mapped into CuraOS actors by the broker's deterministic UUIDv5 (deriveActorId) keyed on subject - keep that derivation so existing actor rows + sessions survive. Migrate passkeys: export pocket-id WebauthnCredential rows (credentialId, publicKey, transports, backup state) into the existing webauthn-registration store schema (compatible shape). Migrate groups/claims into the new group/claims model.",
+        "gate": "every existing user resolves to the same actor id; every registered passkey verifies against our provider; client list complete"
+      },
+      {
+        "step": 5,
+        "name": "Switch the broker to our own issuer",
+        "detail": "Repoint oidc-broker-config idpIssuer/idpAudience/JWKS at OUR provider (curaos-identity issuer) instead of auth.example.com/pocket-id. The broker keeps working unchanged because it just validates id_tokens against a discovery JWKS - now ours. This is the seam that makes cutover reversible: flip issuer back to pocket-id to roll back.",
+        "gate": "broker validates our id_tokens; FE apps log in end-to-end against our provider; live verification on a canary tenant"
+      },
+      {
+        "step": 6,
+        "name": "Collapse the broker (optional, post-stable)",
+        "detail": "Once apps log in directly against our provider, the broker becomes a no-op (our id_token IS already a CuraOS token shape, or the token endpoint mints the downstream shape directly). Delete src/auth/oidc-broker/* and the /auth/oidc/exchange route, or keep it solely for genuine BYO-external-OIDC federation (its real long-term purpose).",
+        "gate": "no app depends on the broker for first-party login; broker repurposed to external-IdP-only"
+      },
+      {
+        "step": 7,
+        "name": "Decommission pocket-id",
+        "detail": "Drain auth.example.com traffic, snapshot pocket-id DB for audit retention, tear down the pocket-id deployment + DNS, remove CURAOS_OIDC_* pocket-id env. Keep the snapshot per audit-retention policy.",
+        "gate": "zero traffic to pocket-id for the soak window; rollback issuer-flip proven before teardown; user-confirmed (destructive)"
+      }
+    ],
+    "license_note": "pocket-id is BSD-2-Clause (permissive, vendor-safe) but it is Go+Svelte+Fosite+GORM - wrong stack. We port-adapt PATTERNS (data model, endpoint shapes, claims), not code. node-oidc-provider (MIT via Logto's fork pattern) is the reuse vehicle on our TS stack."
+  },
+  "capability_map": [
+    {
+      "area": "OIDC/OAuth2 provider",
+      "best_sources": [
+        "Logto packages/core/src/oidc/* (init.ts, adapter.ts, grants/*, scope.ts, extra-token-claims.ts, resource.ts) - closest stack-fit, MIT",
+        "node-oidc-provider (Logto's underlying fork) - the actual lib",
+        "ory-hydra /oauth2 + /consent + Fosite - certified reference for grant/flow correctness",
+        "pocket-id /backend/internal/oidc/* - lean BSD reference for the minimal endpoint set + data model"
+      ],
+      "local_owner": "identity-service (new oidc-provider module) + @curaos/identity-sdk",
+      "maturity": "absent (provider) / partial (signing+sessions+DPoP primitives exist)",
+      "integration_mode": "port-adapt Logto patterns; vendor node-oidc-provider (MIT) as the dependency; reference Hydra/pocket-id for correctness. NOT service-boundary (keep single Bun stack).",
+      "generator_first_target": "auth.tsp + auth.asyncapi.yaml gain the full provider surface; @curaos/identity-sdk regenerated; emitServiceLive wires the module; oidc_clients registration becomes a contract-driven seed.",
+      "person_tenant_reshape": "Provider is tenant-scoped via nid column (Citus). Consent screen is person-centric: the person sees exactly what each client receives and can revoke from the account console. Issuer/JWKS are per-deployment, air-gap viable (no external discovery calls).",
+      "license_note": "Logto MPL-2.0 (service-boundary safe, we take patterns not files); node-oidc-provider MIT; Hydra/pocket-id Apache-2.0/BSD-2 reference."
+    },
+    {
+      "area": "SAML 2.0",
+      "best_sources": [
+        "Keycloak services/protocol/saml + saml-core (full SP+IdP, Apache-2.0)",
+        "Logto packages/core/src/saml-application + connector-saml (TS, MPL-2.0, closest stack)",
+        "authentik providers/saml + sources/saml (Python reference)",
+        "Zitadel crewjam/saml usage (Go reference)"
+      ],
+      "local_owner": "new pkg @curaos/identity-federation (SAML adapter)",
+      "maturity": "absent",
+      "integration_mode": "port-adapt from Logto TS SAML; reference Keycloak for assertion/signature/SLO correctness. Vendor a TS SAML lib (e.g. node-saml/samlify family) rather than build XML-DSig.",
+      "generator_first_target": "saml_application + saml_connector contracts in TypeSpec; provider/connector config emitted per-tenant.",
+      "person_tenant_reshape": "SAML is a per-org SSO source (B2B): each org configures its own IdP; person federates in and lands in their org context. Defer to v1.1.",
+      "license_note": "Keycloak Apache-2.0 (reuse-friendly); Logto MPL-2.0 (pattern reuse)."
+    },
+    {
+      "area": "Passkey/WebAuthn",
+      "best_sources": [
+        "LOCAL identity-service webauthn-* (already strong)",
+        "Logto @simplewebauthn/server usage (same lib family we use)",
+        "pocket-id go-webauthn data model for credential-rename/device-state"
+      ],
+      "local_owner": "identity-service (webauthn-registration/authentication/policy services)",
+      "maturity": "have",
+      "integration_mode": "extend local; surface passkey as an interaction step in the new /authorize flow; add label/rename.",
+      "generator_first_target": "credential-management routes already in auth.tsp; add rename op.",
+      "person_tenant_reshape": "Already person-owned credentials. Add per-device naming + last-used so the person manages their own keys; admin surface is read-only for support.",
+      "license_note": "@simplewebauthn MIT; no foreign code lifted."
+    },
+    {
+      "area": "MFA (TOTP, SMS/email OTP, recovery codes, step-up)",
+      "best_sources": [
+        "Zitadel internal/command/session.go (per-factor verified_at, step-up AAL)",
+        "ory-kratos AAL0/1/2 model + totp/lookup strategies",
+        "Logto verification-helpers (totp/backup-code/sms, TS)",
+        "supertokens TOTP/passwordless"
+      ],
+      "local_owner": "identity-service (account/mfa + new step-up in authorize flow)",
+      "maturity": "partial (MFA factors CRUD + recovery codes exist; TOTP/SMS/email OTP + AAL step-up not confirmed)",
+      "integration_mode": "extend local; port-adapt Kratos AAL session model for step-up; use @curaos/providers for SMS/email delivery.",
+      "generator_first_target": "mfa factor types + AAL claim (amr/acr) in contract; challenge ops emitted.",
+      "person_tenant_reshape": "Person chooses+manages their factors in account console; org policy can REQUIRE a minimum AAL but the person keeps control of which methods. Tenant policy via @curaos/policy.",
+      "license_note": "Kratos/Zitadel Apache-2.0/AGPL (Zitadel patterns only, no code); Logto MPL pattern."
+    },
+    {
+      "area": "Social federation (Google/GitHub/etc. as upstream IdP)",
+      "best_sources": [
+        "Logto connector-kit + connectors/* (50+ TS connectors, MPL-2.0 - DIRECT pattern fit)",
+        "ory-kratos selfservice/strategy/oidc + pre-built providers",
+        "authentik sources/oauth",
+        "keycloak broker/oidc + social/*"
+      ],
+      "local_owner": "identity-service oidc-broker (REPURPOSED for external-IdP) + new @curaos/identity-federation",
+      "maturity": "partial (broker already validates external OIDC tokens + JWKS fetch + JTI replay)",
+      "integration_mode": "port-adapt Logto connector-kit abstract-class pattern; the existing broker is exactly the seam - keep it for BYO-external-OIDC after first-party cutover.",
+      "generator_first_target": "connector contract + per-connector config; provider abstraction via @curaos/providers.",
+      "person_tenant_reshape": "Person can link/unlink external identities to their CuraOS account (account console). Org can pin which providers its members may use. Account-linking by email matches the broker's deriveActorId stability.",
+      "license_note": "Logto MPL-2.0 (pattern); Kratos/authentik/keycloak Apache-2.0/MIT."
+    },
+    {
+      "area": "LDAP/AD federation",
+      "best_sources": [
+        "Keycloak federation/ldap + federation/kerberos (most complete, Apache-2.0)",
+        "authentik sources/ldap + cmd/ldap outpost (Go, MIT)",
+        "Zitadel LDAPConfig",
+        "pocket-id ldap_service.go (lean polling-sync reference)"
+      ],
+      "local_owner": "new pkg @curaos/identity-federation (LDAP adapter)",
+      "maturity": "absent",
+      "integration_mode": "reference Keycloak for attribute-mapping/sync semantics; build a TS polling-sync adapter (vendor ldapjs). Self-hosted-first: customer LDAP, no cloud directory.",
+      "generator_first_target": "ldap_source config contract + sync-trigger op; ldapId column added to user model.",
+      "person_tenant_reshape": "LDAP is a per-org directory source for B2B tenants; synced users land in the org with org-scoped roles. Soft-delete = disable not remove (person data preserved).",
+      "license_note": "Keycloak Apache-2.0; authentik MIT; pocket-id BSD-2."
+    },
+    {
+      "area": "User model + lifecycle + account linking",
+      "best_sources": [
+        "LOCAL identity-service user/account model",
+        "supertokens AuthRecipe primary-user + account-linking (multiple credentials -> one primary)",
+        "Zitadel Human/Machine + state machine (active/inactive/locked/suspended/initial)",
+        "Logto composite identities + custom-profile-fields",
+        "ory-kratos JSON-Schema traits"
+      ],
+      "local_owner": "identity-service (user model) + @curaos/identity-sdk",
+      "maturity": "partial (user+roles+rich self-service exist; custom-claims, profile-picture, machine accounts, account-linking, lifecycle states incomplete)",
+      "integration_mode": "extend local; port-adapt supertokens account-linking + Zitadel lifecycle states + Kratos trait-schema for extensible attributes.",
+      "generator_first_target": "user model + custom_claims + machine-account in contract; lifecycle state enum; claims-mapper.",
+      "person_tenant_reshape": "One PERSON, many identities (password+passkey+social+enterprise) linked to one primary actor - the broker's deterministic UUIDv5 already implements this stability. Person owns + exports + deletes their data (GDPR self-service already exceeds pocket-id).",
+      "license_note": "supertokens/Zitadel/Kratos Apache-2.0/AGPL (patterns only)."
+    },
+    {
+      "area": "Org/tenant/B2B model",
+      "best_sources": [
+        "Zitadel Instance->Org->Project hierarchy (the canonical 3-level B2B model)",
+        "Keycloak Organizations feature (org-within-realm, invitations, domain discovery)",
+        "Logto Organizations + OrganizationRoles + OrganizationScopes + OrganizationInvitations + email-domain JIT SSO (TS, closest fit)",
+        "ory-kratos OrganizationID + org session lifespans"
+      ],
+      "local_owner": "@curaos/tenancy (deployment tenant) + NEW B2B org layer in identity-service (org-within-tenant)",
+      "maturity": "partial (tenancy = deployment-tenant isolation is real-working; B2B org-within-tenant is absent)",
+      "integration_mode": "port-adapt Logto's org model (it is our exact stack + the WorkOS-superset shape the scope demands). Map: @curaos/tenancy stays the DEPLOYMENT/isolation tenant (Citus shared/schema/db-per-tenant); add Logto-style Organizations as customer-orgs WITHIN a tenant, with org roles/scopes/invitations/JIT-domain SSO.",
+      "generator_first_target": "organization + org_role + org_scope + org_invitation + email_domain contracts; org claims (org_id, org_roles) injected into tokens via the claims mapper.",
+      "person_tenant_reshape": "Two layers, both honored: deployment-tenant = isolation boundary (PHI never crosses); customer-org = the B2B grouping the PERSON belongs to. A person can belong to multiple orgs; org-switch is a person-centric account action. JIT email-domain join makes onboarding a person-journey, not an admin task.",
+      "license_note": "Logto MPL-2.0 (pattern reuse, our stack); Zitadel AGPL + Keycloak Apache-2.0 (reference only)."
+    },
+    {
+      "area": "RBAC",
+      "best_sources": [
+        "LOCAL @curaos/policy (RBAC + field-level permlevels already working)",
+        "Logto roles + org-roles + role-scope + token claim injection",
+        "Keycloak realm/client roles + composite roles",
+        "Zitadel project grants"
+      ],
+      "local_owner": "@curaos/policy + identity-service (role assignment) + new org-role layer",
+      "maturity": "partial (engine real but scaffold-only package; org-roles + composite roles + scope-claims absent)",
+      "integration_mode": "extend @curaos/policy; port-adapt Logto org-role/scope -> token-claim path + Keycloak composite-roles.",
+      "generator_first_target": "role + scope + role-scope + composite contracts; role claims in token mapper.",
+      "person_tenant_reshape": "Roles are org-scoped (B2B): a person has different roles in different orgs. Token carries org_roles for the active org. Person-facing apps see capabilities, not raw roles.",
+      "license_note": "@curaos/policy is ours (clean-room, ADR-noted no GPL/AGPL/MPL lift); references Apache/MPL patterns only."
+    },
+    {
+      "area": "ABAC",
+      "best_sources": [
+        "LOCAL @curaos/policy ABAC (subjectIsOwner, tenantMatch, additive-only)",
+        "OpenFGA contextual tuples + CEL conditions (ABAC overlaid on ReBAC, Apache-2.0)",
+        "Keycloak authz attribute/JS policies",
+        "Zitadel domain/login/password policies"
+      ],
+      "local_owner": "@curaos/policy",
+      "maturity": "partial (two conditions + additive model; no attribute-expression/CEL engine)",
+      "integration_mode": "extend @curaos/policy; for richer attribute rules, port-adapt OpenFGA CEL-condition evaluation rather than build a DSL.",
+      "generator_first_target": "abac_rule contracts; condition catalog; field-permission masks already modeled.",
+      "person_tenant_reshape": "ABAC is the person-protective layer: subjectIsOwner gives the person self-access by default; tenantMatch prevents cross-tenant leakage. Additive-only means policy never silently revokes a person's own-data access.",
+      "license_note": "OpenFGA Apache-2.0 (pattern); @curaos/policy ours."
+    },
+    {
+      "area": "ReBAC / fine-grained entitlements",
+      "best_sources": [
+        "OpenFGA (Zanzibar: model DSL, Check/ListObjects/ListUsers/Expand, contextual tuples, weighted-graph opt, Postgres backend, Apache-2.0)",
+        "ory-keto (Zanzibar + OPL, Connect-RPC, Apache-2.0)",
+        "Keycloak authz UMA (resource-owner reference)"
+      ],
+      "local_owner": "NEW pkg @curaos/entitlements (ReBAC service) OR @curaos/policy extension; consumed by identity-service for client/scope gating",
+      "maturity": "absent",
+      "integration_mode": "DECISION POINT (see decisions): OpenFGA-as-embedded-Go-service (best engine, breaks single-stack) vs Keto (same, Connect-RPC) vs extend @curaos/policy with a relation-tuple table on Postgres (single-stack, less optimized). Given Citus + single-Bun-stack charter, lean to port-adapt the Zanzibar tuple model + Check algorithm INTO @curaos/policy on Postgres; OpenFGA as the reference + the escape hatch if Check latency demands it.",
+      "generator_first_target": "authorization_model DSL + relation_tuple + Check/ListObjects contracts; tuples are tenant-scoped (nid).",
+      "person_tenant_reshape": "Entitlements answer 'can THIS person do THIS to THIS resource' - the core person-centric authz question. Resource ownership tuples make the person the owner of their records by default; sharing is an explicit person-driven grant.",
+      "license_note": "OpenFGA + Keto Apache-2.0 (vendor or pattern); Keycloak Apache-2.0."
+    },
+    {
+      "area": "Self-service flows (login/register/recovery/verification/settings)",
+      "best_sources": [
+        "ory-kratos flow state-machines + headless node/container model (Apache-2.0, the cleanest engine)",
+        "authentik Flow+Stage composition engine (21 stages, policy-gated, MIT)",
+        "Logto experience package + sign-in-experience policy engine (TS)",
+        "LOCAL account.controller (already broad self-service)"
+      ],
+      "local_owner": "identity-service (flows) + hosted-login (UI) + new sign-in-experience config",
+      "maturity": "partial (rich self-service routes exist but no declarative flow engine; flows are hardcoded)",
+      "integration_mode": "DECISION POINT: adopt a Kratos-style state-machine OR authentik-style stage-composition for configurable flows, OR keep hardcoded flows + node-oidc-provider interactions (lazy default). For v1, the provider's interaction API + existing services is enough; a declarative flow engine is v1.1 if tenants need custom flows.",
+      "generator_first_target": "flow/stage config contract (if adopted); otherwise interaction routes only.",
+      "person_tenant_reshape": "Flows are the person's journey (sign-in/recover/verify) - already the spine. Configurable per org branding. Recovery via code OR passkey keeps the person unlocked.",
+      "license_note": "Kratos/authentik Apache-2.0/MIT (pattern); Logto MPL."
+    },
+    {
+      "area": "Admin console",
+      "best_sources": [
+        "Logto packages/console (React admin, MPL) + management REST",
+        "authentik web/src/admin (Lit)",
+        "Keycloak admin-ui (React 19) + Admin REST v2",
+        "supertokens dashboard"
+      ],
+      "local_owner": "NEW frontend admin app (generator emitUiApp) + identity-service admin API",
+      "maturity": "partial (admin API = users+roles only; no client/group/claims/audit admin; no admin app)",
+      "integration_mode": "generator-first: emit a CuraOS admin app from the contract; reference Logto/Keycloak admin IA for what screens to include.",
+      "generator_first_target": "admin REST surface in contract; emitUiApp generates the admin app from @curaos/api-client hooks + @curaos/ui.",
+      "person_tenant_reshape": "Admin is ORG-admin-scoped, not god-mode: a customer-org admin manages only their org's members/roles/clients. Workflows organize around onboarding/serving the org's people, not raw CRUD.",
+      "license_note": "Logto MPL; Keycloak/authentik/supertokens Apache-2.0/MIT (reference)."
+    },
+    {
+      "area": "Account console",
+      "best_sources": [
+        "LOCAL account.controller + hosted-login (already best-in-class on GDPR)",
+        "Logto packages/account (React self-service)",
+        "authentik web/src/user",
+        "Keycloak account-ui"
+      ],
+      "local_owner": "identity-service (account API) + hosted-login",
+      "maturity": "have (exceeds pocket-id: data-export, deletion-request, security-overview, recommendations, activity, trusted-devices)",
+      "integration_mode": "extend local; add authorized-clients view/revoke (needs provider grant store) + API-keys + email-verify + identity-linking.",
+      "generator_first_target": "account routes already contract-backed; add the 3 missing panels.",
+      "person_tenant_reshape": "This IS the person-centric surface - the person owns profile, credentials, sessions, consents, exports, deletion. Already the model the lens demands.",
+      "license_note": "Logto MPL; rest Apache-2.0/MIT (reference)."
+    },
+    {
+      "area": "SCIM 2.0 provisioning",
+      "best_sources": [
+        "Zitadel internal/api/scim (full CRUD+filter+bulk, AGPL reference)",
+        "Keycloak scim/* (read/write/delete + reverse-sync, Apache-2.0)",
+        "authentik providers/scim (outbound, MIT)"
+      ],
+      "local_owner": "new pkg @curaos/identity-scim",
+      "maturity": "absent (pocket-id itself only has config+trigger, no full API)",
+      "integration_mode": "build inbound SCIM 2.0 (Users+Groups CRUD) referencing Keycloak/Zitadel; outbound (sync to SaaS) v1.1. Defer to v1.1 overall.",
+      "generator_first_target": "SCIM resource schemas + endpoints in contract (it is just a REST surface over the user/group model).",
+      "person_tenant_reshape": "SCIM provisions org members for B2B tenants - an IT-admin convenience that still results in person-owned accounts.",
+      "license_note": "Keycloak/authentik Apache-2.0/MIT (reuse); Zitadel AGPL (reference only)."
+    },
+    {
+      "area": "Sessions",
+      "best_sources": [
+        "LOCAL refresh-session.service + valkey-refresh-session-store (production-grade)",
+        "ory-hydra challenge/verifier stateless flow + consent persistence",
+        "Zitadel multi-factor session model (per-factor verified_at)",
+        "supertokens refresh-token rotation + theft-detection"
+      ],
+      "local_owner": "identity-service",
+      "maturity": "partial (refresh sessions excellent; OAuth2 code/interaction/device/PAR session store absent until provider lands; theft-detection rotation not confirmed)",
+      "integration_mode": "extend local; provider Drizzle adapter persists code/interaction/device/PAR; reuse the refresh-session store as the refresh backend; port-adapt supertokens rotating-refresh theft detection.",
+      "generator_first_target": "session contracts (list/revoke already present); add theft-detection.",
+      "person_tenant_reshape": "Person sees+revokes every session/device in account console (already built). Per-org session lifespans (Kratos pattern) let stricter orgs shorten without affecting the person's other orgs.",
+      "license_note": "Hydra/Kratos/supertokens Apache-2.0 (pattern)."
+    },
+    {
+      "area": "Hooks/actions",
+      "best_sources": [
+        "ory-hydra token hooks (AccessRequestHook/RefreshTokenHook HTTP callout) + Kratos webhook hooks",
+        "Zitadel Action flows (goja JS, pre/post auth/token)",
+        "authentik flow stages",
+        "Logto before/after hooks + webhook delivery+retry",
+        "CuraOS workflow-core/BPM (charter: builder+BPM first)"
+      ],
+      "local_owner": "identity-service (token-claims hook) + CuraOS workflow-core for richer flows",
+      "maturity": "absent (no auth hooks; but CuraOS has an event-led outbox + BPM engine to lean on)",
+      "integration_mode": "port-adapt Hydra token-hook for claims enrichment (resolve org/roles/tenant at token mint); for user-event side-effects, prefer the existing event-led outbox + workflow-core (charter: configure not code) over a bespoke webhook engine.",
+      "generator_first_target": "token-hook config + event contracts (already event-led).",
+      "person_tenant_reshape": "Hooks enrich tokens with the person's active-org context; user-event flows (post-register onboarding) become person-journey BPM workflows.",
+      "license_note": "Hydra/Kratos Apache-2.0; Zitadel AGPL (pattern); Logto MPL."
+    },
+    {
+      "area": "Audit",
+      "best_sources": [
+        "LOCAL identity-core/audit + auth-audit-publisher (tamper-evident hash-chain, event-led)",
+        "Zitadel event-sourced 100% audit trail (reference for completeness)",
+        "authentik Event + sanitization + retention",
+        "pocket-id geo-enriched audit"
+      ],
+      "local_owner": "identity-service (identity-core/audit)",
+      "maturity": "have (strong; hash-chain + outbox)",
+      "integration_mode": "extend local; feed provider events (authorize/consent/token/end-session) into the existing chain; add optional geo enrichment via provider.",
+      "generator_first_target": "audit-log query API + event schemas (already in audit-event.schema.ts).",
+      "person_tenant_reshape": "Person can see their OWN security activity (account console activity/security-overview already built); org-admins see org-scoped audit; tamper-evidence protects the person's record.",
+      "license_note": "Zitadel AGPL (reference); authentik MIT; local is ours."
+    },
+    {
+      "area": "API design",
+      "best_sources": [
+        "LOCAL TypeSpec + AsyncAPI + @hey-api/openapi-ts SDK gen (generator-first spine)",
+        "Zitadel protobuf->connectRPC resource-oriented v2",
+        "authentik drf-spectacular OpenAPI 3.1 + typed clients",
+        "Logto TypeSpec + auto-SDK (same approach)"
+      ],
+      "local_owner": "@curaos/contracts + @curaos/identity-sdk + tools/codegen",
+      "maturity": "have (contracts-first is the established pattern; auth.tsp + auth.asyncapi.yaml exist)",
+      "integration_mode": "extend local contracts; every new provider/org/scim surface lands in TypeSpec FIRST then regenerates the SDK (generator-evolution-rule).",
+      "generator_first_target": "THIS IS the generator-first owner: all the above areas land as contract extensions + SDK regen + emitServiceLive/emitUiApp.",
+      "person_tenant_reshape": "Resource-oriented, tenant-scoped, person-readable. Same contract drives both person-facing and management surfaces.",
+      "license_note": "All-ours toolchain; references permissive corpora."
+    }
+  ],
+  "gaps": [
+    {
+      "gap": "OIDC/OAuth2 PROVIDER (the core retire-pocket-id deliverable)",
+      "scope": "CIAM/IdP",
+      "absent_today": "identity-service emits only first-party CuraOS tokens; no /authorize, discovery, JWKS endpoint, client registry, consent flow, /token grants, /userinfo, /introspect, /revoke, device, PAR.",
+      "best_source": "node-oidc-provider (MIT) + Logto packages/core/src/oidc/* port-adapt + Hydra/pocket-id reference",
+      "target_owner": "identity-service (new oidc-provider module) + @curaos/identity-sdk",
+      "steps": [
+        "author provider contracts in auth.tsp",
+        "wrap node-oidc-provider as a NestJS module with a Drizzle/Citus adapter",
+        "reuse existing ES256 keyset + refresh-session store + DPoP + webauthn/MFA as interaction impls",
+        "register the 19-22 FE apps as clients",
+        "ship behind CURAOS_OWN_OIDC flag, conformance-smoke locally"
+      ],
+      "version": "v1 (blocks pocket-id retirement)"
+    },
+    {
+      "gap": "B2B Organization model (org-within-tenant)",
+      "scope": "B2B org-management (WorkOS/Auth0-superset)",
+      "absent_today": "@curaos/tenancy is deployment-tenant isolation only; no customer-org grouping, org-roles, org-scopes, org-invitations, JIT email-domain SSO, multi-org membership.",
+      "best_source": "Logto Organizations (exact stack) + Zitadel Instance->Org->Project + Keycloak Organizations",
+      "target_owner": "new B2B org layer in identity-service + @curaos/policy (org-roles), tenancy stays the isolation boundary",
+      "steps": [
+        "model organization/org_role/org_scope/org_invitation/email_domain in contract",
+        "inject org_id+org_roles into token claims via the claims mapper",
+        "build org-switch + JIT-domain-join as person-centric account actions",
+        "org-admin console scope"
+      ],
+      "version": "v1 (core scope)"
+    },
+    {
+      "gap": "Fine-grained entitlements / ReBAC (Zanzibar)",
+      "scope": "entitlements",
+      "absent_today": "@curaos/policy is RBAC + additive ABAC + field-permlevels only; no relation tuples, no Check/ListObjects/ListUsers/Expand, no resource-ownership graph.",
+      "best_source": "OpenFGA (Apache-2.0, best engine) + ory-keto (OPL) reference",
+      "target_owner": "@curaos/policy extension (Postgres relation-tuple table + Check) OR new @curaos/entitlements; OpenFGA as escape-hatch service",
+      "steps": [
+        "port-adapt Zanzibar tuple model + Check algorithm into @curaos/policy on Citus (single-stack default)",
+        "tenant-scope tuples by nid",
+        "expose Check/ListObjects via SDK",
+        "benchmark Check latency; promote to embedded OpenFGA only if needed"
+      ],
+      "version": "v1.1 (RBAC+ABAC suffice for v1; entitlements is the superset push)"
+    },
+    {
+      "gap": "API keys (user personal access tokens)",
+      "scope": "CIAM",
+      "absent_today": "no api_keys table/routes; only service-token verification.",
+      "best_source": "pocket-id apikey/* + supertokens",
+      "target_owner": "identity-service",
+      "steps": [
+        "api_keys table + CRUD + middleware",
+        "expiry + lastUsedAt + expiration email via EmailProvider",
+        "account-console panel"
+      ],
+      "version": "v1 (pocket-id parity)"
+    },
+    {
+      "gap": "LDAP/AD federation",
+      "scope": "B2B / enterprise",
+      "absent_today": "no LDAP adapter, no ldapId column, no sync.",
+      "best_source": "Keycloak federation/ldap + authentik cmd/ldap + pocket-id ldap_service.go",
+      "target_owner": "new pkg @curaos/identity-federation",
+      "steps": [
+        "ldap_source config contract + ldapId column",
+        "TS polling-sync adapter (ldapjs) via scheduler + @curaos/providers",
+        "attribute mapping + soft-delete-as-disable + admin-group detection",
+        "per-org directory binding"
+      ],
+      "version": "v1.1"
+    },
+    {
+      "gap": "SAML 2.0 (IdP + SP/source)",
+      "scope": "B2B / enterprise SSO",
+      "absent_today": "no SAML at all.",
+      "best_source": "Logto SAML (TS) + Keycloak saml-core reference",
+      "target_owner": "@curaos/identity-federation",
+      "steps": [
+        "port-adapt Logto TS SAML",
+        "vendor a TS SAML lib (samlify family) for XML-DSig",
+        "per-org SAML connector config",
+        "assertion/SLO correctness vs Keycloak reference"
+      ],
+      "version": "v1.1"
+    },
+    {
+      "gap": "SCIM 2.0 provisioning",
+      "scope": "B2B / enterprise",
+      "absent_today": "no SCIM (pocket-id itself only has config+trigger stub).",
+      "best_source": "Keycloak scim/* + Zitadel internal/api/scim reference",
+      "target_owner": "new pkg @curaos/identity-scim",
+      "steps": [
+        "inbound SCIM Users+Groups CRUD over existing user/org model",
+        "filter/bulk per RFC 7644",
+        "outbound reverse-sync v1.1+"
+      ],
+      "version": "v1.1"
+    },
+    {
+      "gap": "Social federation as productized connectors",
+      "scope": "CIAM (BYO-external-OIDC)",
+      "absent_today": "broker validates external tokens but there is no connector framework / linkable social identities / per-org provider pinning.",
+      "best_source": "Logto connector-kit + connectors/* (exact stack)",
+      "target_owner": "identity-service oidc-broker (repurposed) + @curaos/identity-federation",
+      "steps": [
+        "port-adapt Logto connector-kit abstract class",
+        "account-linking via deriveActorId stability",
+        "per-org allowed-providers",
+        "account-console link/unlink"
+      ],
+      "version": "v1 (broker exists; productize) / v1.1 (full connector catalog)"
+    },
+    {
+      "gap": "Email verification + signup-token usage limits + unauthenticated one-time-access-email",
+      "scope": "CIAM",
+      "absent_today": "password-reset + recovery-codes exist; explicit email-verify flow + emailVerified claim + signup-token usageLimit/usageCount + unauth one-time-access request not confirmed.",
+      "best_source": "pocket-id user_signup_service.go + Logto",
+      "target_owner": "identity-service",
+      "steps": [
+        "email-verification token + send/verify routes + emailVerified claim",
+        "extend registration tokens with usage limits + default claims",
+        "unauth one-time-access-email endpoint"
+      ],
+      "version": "v1 (pocket-id parity)"
+    },
+    {
+      "gap": "Custom claims (per-user + per-group, token-injected) + profile picture + machine accounts",
+      "scope": "CIAM / user model",
+      "absent_today": "custom_claims, profile-picture upload, machine (service) accounts, account-linking, lifecycle-state enum not confirmed.",
+      "best_source": "pocket-id CustomClaim + Zitadel Machine accounts + supertokens account-linking",
+      "target_owner": "identity-service",
+      "steps": [
+        "custom_claims table + claims mapper",
+        "profile-picture upload -> @curaos/storage",
+        "machine-account type + client_credentials",
+        "lifecycle states (active/inactive/locked/suspended/initial)"
+      ],
+      "version": "v1 (claims+picture) / v1.1 (machine accounts)"
+    },
+    {
+      "gap": "Provider interaction UI (consent, account-selection, reauth, device-verify) + admin app for clients/groups/claims/audit",
+      "scope": "console",
+      "absent_today": "hosted-login has sign-in/account/settings but no consent/authorize-interaction/device pages; no admin app beyond users+roles API.",
+      "best_source": "Logto experience + console (React, same stack)",
+      "target_owner": "hosted-login + new generator-emitted admin app",
+      "steps": [
+        "interaction routes in hosted-login driven by provider interaction API",
+        "emitUiApp the admin app from the admin contract",
+        "org-admin-scoped, person-centric consent screen"
+      ],
+      "version": "v1 (consent/interaction blocks login) / v1.1 (full admin app)"
+    },
+    {
+      "gap": "Declarative self-service flow engine (configurable per-org flows)",
+      "scope": "CIAM customization",
+      "absent_today": "flows are hardcoded in services; no Kratos-style state machine or authentik-style stage composition.",
+      "best_source": "ory-kratos flow state-machines / authentik Flow+Stage engine",
+      "target_owner": "identity-service (flow engine) - DEFERRED",
+      "steps": [
+        "v1 uses provider interactions + existing services (no engine)",
+        "v1.1 adopt a flow engine only if tenants demand custom flows"
+      ],
+      "version": "v1.1 (YAGNI for v1 - lazy default)"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "ADR-OIDC-PROVIDER-LIB",
+      "question": "What library/strategy backs our OWN OIDC/OAuth2 provider?",
+      "options": [
+        {
+          "choice": "node-oidc-provider wrapped in a NestJS module (Logto's choice)",
+          "pros": [
+            "pure TS, fits Bun+NestJS single-stack + Bun-compile single-binary charter",
+            "Logto is a proven production reference on this exact lib (port-adapt packages/core/src/oidc/*)",
+            "Drizzle adapter keeps Citus tenant-scoping",
+            "reuses existing ES256/DPoP/refresh-session/webauthn/MFA as interactions",
+            "MIT license"
+          ],
+          "cons": [
+            "we own conformance maintenance",
+            "interaction wiring is non-trivial"
+          ]
+        },
+        {
+          "choice": "Build the provider from scratch",
+          "pros": [
+            "full control"
+          ],
+          "cons": [
+            "re-implements a certified protocol surface",
+            "high cert/maintenance risk",
+            "violates ponytail/YAGNI - rung 5 says use the installed/available lib"
+          ]
+        },
+        {
+          "choice": "Ory Hydra as a separate Go service",
+          "pros": [
+            "OpenID-certified",
+            "cleanest no-user-mgmt headless separation",
+            "identity-service already speaks its challenge/verifier pattern"
+          ],
+          "cons": [
+            "Go service-boundary breaks the single Bun stack + single-binary compile charter",
+            "extra deployment unit for air-gap",
+            "Apache-2.0 fine but adds a second runtime"
+          ]
+        }
+      ],
+      "recommendation": "node-oidc-provider in NestJS (Logto-aligned). Hydra is the documented escape-hatch if certification pressure outweighs single-stack. Build-from-scratch rejected.",
+      "binding_constraints": [
+        "single Bun+NestJS stack",
+        "Bun-compile single binary",
+        "self-hosted-first + air-gap",
+        "generator-first contracts",
+        "Logto weighted as closest stack-fit reuse"
+      ]
+    },
+    {
+      "id": "ADR-REBAC-ENGINE",
+      "question": "How do we deliver fine-grained entitlements (ReBAC)?",
+      "options": [
+        {
+          "choice": "Port-adapt Zanzibar tuple model + Check INTO @curaos/policy on Citus/Postgres",
+          "pros": [
+            "single stack, no new runtime",
+            "tenant-scoped by nid natively",
+            "reuses our policy package + Citus",
+            "lazy default - extend what exists"
+          ],
+          "cons": [
+            "less optimized than OpenFGA's weighted-graph Check",
+            "we own the Check algorithm"
+          ]
+        },
+        {
+          "choice": "Embed OpenFGA as a Go service",
+          "pros": [
+            "best-in-class Zanzibar engine",
+            "Check/ListObjects/ListUsers/Expand + contextual-tuple CEL",
+            "Apache-2.0"
+          ],
+          "cons": [
+            "Go service-boundary breaks single-stack",
+            "extra deploy unit"
+          ]
+        },
+        {
+          "choice": "Ory Keto as a service",
+          "pros": [
+            "Zanzibar + OPL DSL",
+            "Connect-RPC"
+          ],
+          "cons": [
+            "same Go service-boundary cost",
+            "no native multi-tenant isolation (app responsibility)"
+          ]
+        }
+      ],
+      "recommendation": "Extend @curaos/policy with a Postgres relation-tuple table + Check (port-adapt OpenFGA model/algorithm) for v1.1; promote to embedded OpenFGA ONLY if Check latency benchmarks fail. RBAC+ABAC already cover v1.",
+      "binding_constraints": [
+        "single stack default",
+        "Citus tenant isolation",
+        "@curaos/policy is the canonical authz owner",
+        "no GPL/AGPL/MPL code lift (Apache-2.0 OpenFGA pattern OK)"
+      ]
+    },
+    {
+      "id": "ADR-ORG-TENANT-MODEL",
+      "question": "How do we model B2B organizations vs deployment tenants?",
+      "options": [
+        {
+          "choice": "Two layers: @curaos/tenancy = deployment/isolation tenant (Citus); Logto-style Organizations = customer-org WITHIN a tenant",
+          "pros": [
+            "preserves PHI isolation boundary (tenant) while adding B2B grouping (org)",
+            "Logto org model is our exact stack + the WorkOS-superset shape required",
+            "person can belong to multiple orgs",
+            "JIT email-domain join = person-journey onboarding"
+          ],
+          "cons": [
+            "two concepts to keep distinct in docs/UX"
+          ]
+        },
+        {
+          "choice": "Zitadel-style Instance->Org->Project replacing our tenancy",
+          "pros": [
+            "canonical 3-level B2B model"
+          ],
+          "cons": [
+            "rewrites working @curaos/tenancy",
+            "AGPL (reference only)",
+            "conflates isolation with grouping"
+          ]
+        },
+        {
+          "choice": "Keycloak realms",
+          "pros": [
+            "mature org-within-realm"
+          ],
+          "cons": [
+            "wrong stack",
+            "realm != our Citus isolation model"
+          ]
+        }
+      ],
+      "recommendation": "Two-layer: keep @curaos/tenancy as the isolation boundary; add Logto-style Organizations as the B2B layer inside it. Org claims (org_id, org_roles) injected at token mint.",
+      "binding_constraints": [
+        "@curaos/tenancy is real-working - extend not replace",
+        "PHI never crosses the deployment-tenant boundary",
+        "person-centric multi-org membership",
+        "Logto closest stack-fit"
+      ]
+    },
+    {
+      "id": "ADR-SELF-SERVICE-FLOW-ENGINE",
+      "question": "Do we adopt a declarative self-service flow engine?",
+      "options": [
+        {
+          "choice": "No engine for v1 - use node-oidc-provider interactions + existing hardcoded services",
+          "pros": [
+            "YAGNI/ponytail - existing self-service is already broad",
+            "fastest path to pocket-id parity",
+            "no speculative abstraction"
+          ],
+          "cons": [
+            "per-org custom flows not configurable yet"
+          ]
+        },
+        {
+          "choice": "Kratos-style state-machine flow engine",
+          "pros": [
+            "clean headless node/container model",
+            "configurable flows"
+          ],
+          "cons": [
+            "large build for a need no tenant has yet"
+          ]
+        },
+        {
+          "choice": "Authentik-style Flow+Stage composition",
+          "pros": [
+            "21 stages, policy-gated, very flexible"
+          ],
+          "cons": [
+            "heaviest option",
+            "speculative"
+          ]
+        }
+      ],
+      "recommendation": "v1: NO engine (provider interactions + existing services). Revisit in v1.1 ONLY if tenants demand custom flows. Lazy-ladder rung 1: question whether it needs to exist yet - it does not.",
+      "binding_constraints": [
+        "ponytail/YAGNI",
+        "existing account/auth self-service is have-grade",
+        "person-journey flows already the spine"
+      ]
+    },
+    {
+      "id": "ADR-USER-FEDERATION",
+      "question": "How do we federate external directories (LDAP/AD) and external IdPs?",
+      "options": [
+        {
+          "choice": "New @curaos/identity-federation pkg: TS LDAP polling-sync adapter (ldapjs) + repurpose oidc-broker for BYO-external-OIDC + Logto-connector-kit social connectors",
+          "pros": [
+            "single stack",
+            "the broker ALREADY validates external OIDC + JWKS fetch + JTI replay - its real long-term purpose",
+            "deriveActorId gives stable account-linking",
+            "self-hosted customer-directory, no cloud lock-in"
+          ],
+          "cons": [
+            "LDAP/SAML are v1.1 build effort"
+          ]
+        },
+        {
+          "choice": "Embed Keycloak/authentik as the federation broker",
+          "pros": [
+            "mature LDAP+SAML+social"
+          ],
+          "cons": [
+            "wrong stack, second runtime, breaks charter"
+          ]
+        }
+      ],
+      "recommendation": "@curaos/identity-federation on our stack: keep+repurpose the existing broker for external-OIDC after first-party cutover; add LDAP (v1.1) + SAML (v1.1) adapters referencing Keycloak/authentik patterns. Social via Logto connector-kit pattern.",
+      "binding_constraints": [
+        "single stack + self-hosted-first",
+        "broker is the existing federation seam - do not delete, repurpose",
+        "deriveActorId account-linking stability",
+        "Logto MPL pattern reuse / Keycloak Apache reference"
+      ]
+    },
+    {
+      "id": "ADR-CUTOVER-SEAM",
+      "question": "What is the reversible seam for the pocket-id cutover?",
+      "options": [
+        {
+          "choice": "Flip oidc-broker idpIssuer/JWKS from pocket-id to our provider",
+          "pros": [
+            "broker is issuer-agnostic (validates any discovery JWKS) - one config flip",
+            "instantly reversible (flip back to pocket-id)",
+            "FE apps unaffected if client_ids/redirect_uris preserved",
+            "deriveActorId keeps every existing user mapped to the same actor"
+          ],
+          "cons": [
+            "broker stays in the path until apps move to direct login"
+          ]
+        },
+        {
+          "choice": "Hard-switch FE apps to our provider directly",
+          "pros": [
+            "removes broker sooner"
+          ],
+          "cons": [
+            "not reversible per-flip",
+            "touches every FE app at once - high blast radius"
+          ]
+        }
+      ],
+      "recommendation": "Phase via the broker issuer-flip (reversible canary), then move apps to direct login, then collapse/repurpose the broker, then decommission pocket-id. Decommission is destructive - user-confirm + soak window + DB snapshot first.",
+      "binding_constraints": [
+        "verify-before-build (prove running behavior on canary tenant)",
+        "destructive-op confirm for pocket-id teardown",
+        "audit-retention snapshot before teardown"
+      ]
+    }
+  ]
+}

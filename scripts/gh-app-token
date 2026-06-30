@@ -1,0 +1,9 @@
+#!/usr/bin/env bun
+// scripts/gh-app-token
+// RP-43: print a GitHub token on stdout for `GH_TOKEN=$(scripts/gh-app-token) gh ...`.
+// Uses the org GitHub App installation token (raised REST ceiling) when the
+// CURAOS_GH_APP_* env vars are set; falls back to the keyring gh auth token
+// otherwise. All logic + tests live in scripts/lib/gh-app-token.js.
+// Runbook (operator App registration, key rotation, scopes): docs/agents/gh-app-token.md
+const { main } = require(`${__dirname}/lib/gh-app-token.js`);
+main().then((code) => process.exit(code));

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- launchd LaunchAgent template for the nightly LOCAL Tier E security run
+     (RP-17). install-tier-e-schedule.sh substitutes @REPO_DIR@, @BASH@ and
+     @STATE_DIR@ and copies the result to
+     ~/Library/LaunchAgents/com.curaos.tier-e-nightly.plist.
+     StartCalendarInterval 03:00 = nightly; launchd coalesces a missed
+     interval (machine asleep) into one run on wake. Logs live under the
+     evidence state dir, NOT .scratch/ (which worktree cleanup wipes).
+     This is the DEFAULT Tier E execution path per
+     ai/rules/curaos_quality_gates_rule.md; loading it follows the seeded
+     schedule-decision issue. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.curaos.tier-e-nightly</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@BASH@</string>
+        <string>@REPO_DIR@/scripts/tier-e-local.sh</string>
+        <string>--target</string>
+        <string>@REPO_DIR@/curaos</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>@STATE_DIR@/launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>@STATE_DIR@/launchd.err</string>
+</dict>
+</plist>

@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Mark the GitHub inbox notification(s) for a fully-resolved PR as DONE,
+# clearing them from github.com/notifications.
+#
+# Resolving a PR review THREAD (resolveReviewThread) and marking the inbox
+# NOTIFICATION done are two different GitHub API surfaces — the review-thread
+# GraphQL node vs. the REST notification_thread. Resolving threads does NOT
+# clear the inbox, so this script closes that loop.
+#
+# Matching is scoped to the EXACT repo + PR number (the notification
+# subject.url is the REST ".../pulls/N" form). PR-number-only matching is a
+# bug: PR #2 exists in many repos, and "/pulls/2" must not match "/pulls/12".
+#
+# Default mode is DRY-RUN (prints the matched thread ids, deletes nothing).
+# Pass --apply to actually DELETE (mark done). Reads the notification list
+# from the live API, or from stdin with --stdin (used by tests).
+#
+# Usage:
+#   mark-pr-notification-done [--apply] OWNER/REPO PR_NUMBER
+#   mark-pr-notification-done --stdin [--apply] OWNER/REPO PR_NUMBER   # JSON on stdin
+#
+# Example:
+#   mark-pr-notification-done --apply your-org/curaos 130
+set -uo pipefail
+
+APPLY=0
+USE_STDIN=0
+args=()
+for a in "$@"; do
+  case "$a" in
+    --apply) APPLY=1 ;;
+    --stdin) USE_STDIN=1 ;;
+    *) args+=("$a") ;;
+  esac
+done
+
+if [ "${#args[@]}" -lt 2 ]; then
+  echo "Usage: mark-pr-notification-done [--apply] OWNER/REPO PR_NUMBER" >&2
+  echo "Example: mark-pr-notification-done --apply your-org/curaos 130" >&2
+  exit 2
+fi
+
+REPO="${args[0]}"
+PR="${args[1]}"
+
+# gh wrapper: CuraOS uses a narrow env-var token that 403s on some endpoints;
+# unset GITHUB_TOKEN so gh falls back to the keyring auth (workspace convention).
+gh_api() { env -u GITHUB_TOKEN gh api "$@"; }
+
+# Fetch the notification list (live, paginated) or read it from stdin (tests).
+if [ "$USE_STDIN" -eq 1 ]; then
+  NOTIFS="$(cat)"
+else
+  NOTIFS="$(gh_api /notifications --paginate 2>/dev/null)"
+fi
+
+# Select notifications for the EXACT repo + PR: PullRequest subject whose
+# subject.url ends with the precise ".../<repo>/pulls/<PR>" (no substring
+# bleed — anchored on the full repo path + exact number).
+WANT_SUFFIX="/repos/${REPO}/pulls/${PR}"
+THREAD_IDS="$(printf '%s' "$NOTIFS" | jq -r --arg suf "$WANT_SUFFIX" \
+  '.[] | select(.subject.type == "PullRequest") | select(.subject.url | endswith($suf)) | .id')"
+
+if [ -z "$THREAD_IDS" ]; then
+  # Idempotent: nothing to clear is success.
+  exit 0
+fi
+
+if [ "$APPLY" -eq 0 ]; then
+  echo "DRY-RUN: would mark done (DELETE) these notification thread(s) for ${REPO}#${PR}:" >&2
+  printf '%s\n' "$THREAD_IDS"
+  exit 0
+fi
+
+rc=0
+while IFS= read -r tid; do
+  [ -z "$tid" ] && continue
+  if gh_api --method DELETE "/notifications/threads/$tid" >/dev/null 2>&1; then
+    echo "$tid"
+  else
+    echo "WARN: failed to mark notification thread $tid done" >&2
+    rc=1
+  fi
+done <<< "$THREAD_IDS"
+exit "$rc"

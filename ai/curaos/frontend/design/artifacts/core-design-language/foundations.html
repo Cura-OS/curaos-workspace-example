@@ -1,0 +1,330 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CuraOS · Foundations</title>
+<style>
+  :root{
+    --primary-50:#e8fbff;--primary-100:#c4f1fb;--primary-200:#91e2f3;--primary-300:#4fcbe8;
+    --primary-400:#1fb0d4;--primary-500:#0e90b8;--primary-600:#0d7197;--primary-700:#105a7c;
+    --primary-800:#114863;--primary-900:#0c2f44;
+    --n-0:#fff;--n-50:#f6f8f8;--n-100:#eceff0;--n-200:#dde2e3;--n-300:#c4cccd;--n-400:#9aa5a7;
+    --n-500:#6e797b;--n-600:#525c5e;--n-700:#3c4547;--n-800:#262d2e;--n-900:#161b1c;--n-950:#0d1112;
+    --success:#188a4c;--warning:#b3760a;--error:#bb3328;--info:#1276ad;
+    --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Inter','Segoe UI',Roboto,sans-serif;
+    --mono:'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--n-100);color:var(--n-900);
+    padding:24px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto}
+  .hdr{margin-bottom:24px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--primary-600)}
+  h1{font-size:32px;font-weight:600;letter-spacing:-0.015em;margin:6px 0 4px}
+  .sub{font-size:15px;color:var(--n-600);max-width:64ch}
+  .panes{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:860px){.panes{grid-template-columns:1fr}}
+  .pane{border-radius:16px;padding:24px;border:1px solid}
+  .pane.light{background:#f6f8f8;color:#161b1c;border-color:#dde2e3}
+  .pane.dark{background:#0d1112;color:#eceff0;border-color:#2c3537}
+  .pane-tag{font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
+    opacity:.6;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  .pane-tag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--primary-500)}
+  section{margin-bottom:28px}
+  section:last-child{margin-bottom:0}
+  .lbl{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0;opacity:.55;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .lbl::before{content:"";width:14px;height:1px;background:currentColor;opacity:.4}
+  /* ramp */
+  .ramp{display:flex;border-radius:8px;overflow:hidden;border:1px solid rgba(127,127,127,.15)}
+  .ramp .sw{flex:1;height:48px;display:flex;align-items:flex-end;justify-content:center;
+    padding-bottom:4px;font-size:9px;font-family:var(--mono)}
+  .ramp .sw span{background:rgba(255,255,255,.82);color:#161b1c;border-radius:3px;padding:0 3px}
+  .ramp.dk .sw span{background:rgba(0,0,0,.45);color:#eceff0}
+  .ramp-name{font-size:12px;font-weight:500;margin:14px 0 6px;display:flex;justify-content:space-between}
+  .ramp-name code{font-family:var(--mono);font-size:11px;opacity:.5}
+  /* type */
+  .type-row{display:flex;align-items:baseline;gap:16px;padding:7px 0;border-bottom:1px solid rgba(127,127,127,.12)}
+  .type-row:last-child{border:0}
+  .type-meta{font-family:var(--mono);font-size:10px;opacity:.5;width:120px;flex-shrink:0;letter-spacing:0}
+  .t-display{font-size:44px;font-weight:600;letter-spacing:-0.02em;line-height:1.1}
+  .t-h1{font-size:32px;font-weight:600;letter-spacing:-0.015em}
+  .t-h2{font-size:25px;font-weight:600;letter-spacing:-0.01em}
+  .t-h3{font-size:20px;font-weight:600}
+  .t-body{font-size:15px}
+  .t-sm{font-size:13px;opacity:.85}
+  .t-cap{font-size:12px;font-weight:500;letter-spacing:0.01em;opacity:.7}
+  .t-code{font-family:var(--mono);font-size:13px}
+  /* scale strips */
+  .strip{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+  .box{background:var(--primary-500);border-radius:6px;display:flex;align-items:center;
+    justify-content:center;color:#fff;font-family:var(--mono);font-size:10px}
+  .dark .box{background:var(--primary-400);color:#0d1112}
+  .radii{display:flex;gap:14px;flex-wrap:wrap}
+  .radii .r{width:64px;height:64px;background:var(--primary-100);border:1.5px solid var(--primary-400);
+    display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;font-family:var(--mono);font-size:10px;color:var(--primary-800)}
+  .dark .radii .r{background:#0a2030;border-color:var(--primary-500);color:var(--primary-200)}
+  .elev{display:flex;gap:20px;flex-wrap:wrap}
+  .elev .e{width:96px;height:64px;border-radius:10px;background:#fff;display:flex;align-items:center;
+    justify-content:center;font-family:var(--mono);font-size:10px;color:#525c5e}
+  .dark .elev .e{background:#262d2e;color:#9aa5a7}
+  .e1{box-shadow:0 1px 2px rgba(13,17,18,.06),0 1px 1px rgba(13,17,18,.04)}
+  .e2{box-shadow:0 2px 4px rgba(13,17,18,.06),0 4px 8px rgba(13,17,18,.06)}
+  .e3{box-shadow:0 6px 12px rgba(13,17,18,.08),0 12px 24px rgba(13,17,18,.08)}
+  .e4{box-shadow:0 12px 24px rgba(13,17,18,.10),0 24px 48px rgba(13,17,18,.12)}
+  .dark .e1{box-shadow:0 1px 2px rgba(0,0,0,.4)}
+  .dark .e2{box-shadow:0 4px 8px rgba(0,0,0,.45)}
+  .dark .e3{box-shadow:0 12px 24px rgba(0,0,0,.5)}
+  .dark .e4{box-shadow:0 24px 48px rgba(0,0,0,.55)}
+  .motion-row{display:flex;align-items:center;gap:12px;margin-bottom:8px;cursor:pointer}
+  .track{flex:1;height:6px;background:rgba(127,127,127,.18);border-radius:3px;position:relative;overflow:hidden}
+  .dot{position:absolute;top:-3px;left:0;width:12px;height:12px;border-radius:50%;background:var(--primary-500)}
+  .dark .dot{background:var(--primary-400)}
+  .mlbl{font-family:var(--mono);font-size:10px;width:140px;opacity:.6}
+  .status-grid{display:flex;gap:10px;flex-wrap:wrap}
+  .chip{padding:5px 12px;border-radius:9999px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+  .chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+  .c-suc{color:var(--success);background:#e7f8ec}.c-warn{color:var(--warning);background:#fdf4e3}
+  .c-err{color:var(--error);background:#fdeceb}.c-inf{color:var(--info);background:#e8f4fb}
+  .dark .c-suc{color:#52c47f;background:#0f2e1d}.dark .c-warn{color:#ecae35;background:#352608}
+  .dark .c-err{color:#e5746c;background:#3a1714}.dark .c-inf{color:#52ade0;background:#0c2e44}
+  .note{font-size:12px;color:var(--n-500);margin-top:16px;line-height:1.5;border-top:1px solid var(--n-200);padding-top:14px}
+  .dark-note{border-color:#2c3537}
+
+  /* responsive: desktop / tablet / mobile */
+  @media(max-width:680px){
+    body{padding:16px}
+    .wrap{padding:0}
+    h1{font-size:26px}
+    .pane{padding:18px 16px}
+    .twocol{grid-template-columns:1fr!important}
+    .kpis{grid-template-columns:1fr 1fr!important}
+    .charts,.cards{grid-template-columns:1fr!important}
+    .dp{width:100%!important}
+  }
+  @media(max-width:400px){ .kpis{grid-template-columns:1fr!important} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="eyebrow">CuraOS · Aqua</div>
+    <h1>Foundations</h1>
+    <p class="sub">Teal primary signals healthcare-grade calm; neutrals lean cool slate-teal, not blue. Status colors carry all the saturation so the brand stays one quiet voice. Tenants re-skin by swapping the primary ramp only.</p>
+  </div>
+
+  <div class="panes">
+    <!-- LIGHT -->
+    <div class="pane light">
+      <div class="pane-tag">Light</div>
+
+      <section>
+        <div class="lbl">Primary ramp · brand</div>
+        <div class="ramp">
+          <div class="sw" style="background:#e8fbff"><span>50</span></div>
+          <div class="sw" style="background:#c4f1fb"><span>100</span></div>
+          <div class="sw" style="background:#91e2f3"><span>200</span></div>
+          <div class="sw" style="background:#4fcbe8"><span>300</span></div>
+          <div class="sw" style="background:#1fb0d4"><span>400</span></div>
+          <div class="sw" style="background:#0e90b8"><span>500</span></div>
+          <div class="sw" style="background:#0d7197"><span>600</span></div>
+          <div class="sw" style="background:#105a7c"><span>700</span></div>
+          <div class="sw" style="background:#114863"><span>800</span></div>
+          <div class="sw" style="background:#0c2f44"><span>900</span></div>
+        </div>
+        <div class="ramp-name">Neutral ink <code>slate-teal</code></div>
+        <div class="ramp">
+          <div class="sw" style="background:#f6f8f8"><span>50</span></div>
+          <div class="sw" style="background:#eceff0"><span>100</span></div>
+          <div class="sw" style="background:#dde2e3"><span>200</span></div>
+          <div class="sw" style="background:#c4cccd"><span>300</span></div>
+          <div class="sw" style="background:#9aa5a7"><span>400</span></div>
+          <div class="sw" style="background:#6e797b"><span>500</span></div>
+          <div class="sw" style="background:#525c5e"><span>600</span></div>
+          <div class="sw" style="background:#3c4547"><span>700</span></div>
+          <div class="sw" style="background:#262d2e"><span>800</span></div>
+          <div class="sw" style="background:#161b1c"><span>900</span></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Semantic status</div>
+        <div class="status-grid">
+          <span class="chip c-suc">Success</span>
+          <span class="chip c-warn">Warning</span>
+          <span class="chip c-err">Error</span>
+          <span class="chip c-inf">Info</span>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Type scale · Inter</div>
+        <div class="type-row"><span class="type-meta">display 44/600</span><span class="t-display">Aa</span></div>
+        <div class="type-row"><span class="type-meta">h1 32/600</span><span class="t-h1">Tenant overview</span></div>
+        <div class="type-row"><span class="type-meta">h2 25/600</span><span class="t-h2">Active deployments</span></div>
+        <div class="type-row"><span class="type-meta">h3 20/600</span><span class="t-h3">Connection health</span></div>
+        <div class="type-row"><span class="type-meta">body 15/400</span><span class="t-body">Patient records sync every 30 seconds across stacks.</span></div>
+        <div class="type-row"><span class="type-meta">body-sm 13/400</span><span class="t-sm">Last reconciled 2 min ago by scheduler.</span></div>
+        <div class="type-row"><span class="type-meta">caption 12/500</span><span class="t-cap">UPDATED · EU-WEST-2</span></div>
+        <div class="type-row"><span class="type-meta">code 13 mono</span><span class="t-code">tenant_id: cur_8fa21</span></div>
+      </section>
+
+      <section>
+        <div class="lbl">Spacing · 4px base</div>
+        <div class="strip">
+          <div class="box" style="width:4px;height:24px"></div>
+          <div class="box" style="width:8px;height:24px">8</div>
+          <div class="box" style="width:12px;height:24px">12</div>
+          <div class="box" style="width:16px;height:24px">16</div>
+          <div class="box" style="width:24px;height:24px">24</div>
+          <div class="box" style="width:32px;height:24px">32</div>
+          <div class="box" style="width:48px;height:24px">48</div>
+          <div class="box" style="width:64px;height:24px">64</div>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Radius</div>
+        <div class="radii">
+          <div class="r" style="border-radius:4px">sm</div>
+          <div class="r" style="border-radius:8px">md</div>
+          <div class="r" style="border-radius:12px">lg</div>
+          <div class="r" style="border-radius:16px">xl</div>
+          <div class="r" style="border-radius:9999px">full</div>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Elevation</div>
+        <div class="elev">
+          <div class="e e1">1</div><div class="e e2">2</div><div class="e e3">3</div><div class="e e4">4</div>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Motion · click to preview</div>
+        <div class="motion-row" onclick="ping(this)"><span class="mlbl">fast 140 · standard</span><div class="track"><div class="dot"></div></div></div>
+        <div class="motion-row" onclick="ping(this)"><span class="mlbl">base 200 · decelerate</span><div class="track"><div class="dot"></div></div></div>
+        <div class="motion-row" onclick="ping(this)"><span class="mlbl">slow 320 · standard</span><div class="track"><div class="dot"></div></div></div>
+      </section>
+
+      <p class="note">Body text on <code>bg</code> = neutral-900 on neutral-50 → 16.1:1. Primary-600 button text (white on #0d7197) → 5.0:1. All pairs clear WCAG AA, most clear AAA.</p>
+    </div>
+
+    <!-- DARK -->
+    <div class="pane dark">
+      <div class="pane-tag">Dark</div>
+
+      <section>
+        <div class="lbl">Primary ramp · brand</div>
+        <div class="ramp dk">
+          <div class="sw" style="background:#e8fbff"><span>50</span></div>
+          <div class="sw" style="background:#c4f1fb"><span>100</span></div>
+          <div class="sw" style="background:#91e2f3"><span>200</span></div>
+          <div class="sw" style="background:#4fcbe8"><span>300</span></div>
+          <div class="sw" style="background:#1fb0d4"><span>400</span></div>
+          <div class="sw" style="background:#0e90b8"><span>500</span></div>
+          <div class="sw" style="background:#0d7197"><span>600</span></div>
+          <div class="sw" style="background:#105a7c"><span>700</span></div>
+          <div class="sw" style="background:#114863"><span>800</span></div>
+          <div class="sw" style="background:#0c2f44"><span>900</span></div>
+        </div>
+        <div class="ramp-name">Neutral ink <code>slate-teal</code></div>
+        <div class="ramp dk">
+          <div class="sw" style="background:#0d1112"><span>950</span></div>
+          <div class="sw" style="background:#161b1c"><span>900</span></div>
+          <div class="sw" style="background:#262d2e"><span>800</span></div>
+          <div class="sw" style="background:#3c4547"><span>700</span></div>
+          <div class="sw" style="background:#525c5e"><span>600</span></div>
+          <div class="sw" style="background:#6e797b"><span>500</span></div>
+          <div class="sw" style="background:#9aa5a7"><span>400</span></div>
+          <div class="sw" style="background:#c4cccd"><span>300</span></div>
+          <div class="sw" style="background:#dde2e3"><span>200</span></div>
+          <div class="sw" style="background:#eceff0"><span>100</span></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Semantic status</div>
+        <div class="status-grid">
+          <span class="chip c-suc">Success</span>
+          <span class="chip c-warn">Warning</span>
+          <span class="chip c-err">Error</span>
+          <span class="chip c-inf">Info</span>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Type scale · Inter</div>
+        <div class="type-row"><span class="type-meta">display 44/600</span><span class="t-display">Aa</span></div>
+        <div class="type-row"><span class="type-meta">h1 32/600</span><span class="t-h1">Tenant overview</span></div>
+        <div class="type-row"><span class="type-meta">h2 25/600</span><span class="t-h2">Active deployments</span></div>
+        <div class="type-row"><span class="type-meta">h3 20/600</span><span class="t-h3">Connection health</span></div>
+        <div class="type-row"><span class="type-meta">body 15/400</span><span class="t-body">Patient records sync every 30 seconds across stacks.</span></div>
+        <div class="type-row"><span class="type-meta">body-sm 13/400</span><span class="t-sm">Last reconciled 2 min ago by scheduler.</span></div>
+        <div class="type-row"><span class="type-meta">caption 12/500</span><span class="t-cap">UPDATED · EU-WEST-2</span></div>
+        <div class="type-row"><span class="type-meta">code 13 mono</span><span class="t-code">tenant_id: cur_8fa21</span></div>
+      </section>
+
+      <section>
+        <div class="lbl">Spacing · 4px base</div>
+        <div class="strip">
+          <div class="box" style="width:4px;height:24px"></div>
+          <div class="box" style="width:8px;height:24px">8</div>
+          <div class="box" style="width:12px;height:24px">12</div>
+          <div class="box" style="width:16px;height:24px">16</div>
+          <div class="box" style="width:24px;height:24px">24</div>
+          <div class="box" style="width:32px;height:24px">32</div>
+          <div class="box" style="width:48px;height:24px">48</div>
+          <div class="box" style="width:64px;height:24px">64</div>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Radius</div>
+        <div class="radii">
+          <div class="r" style="border-radius:4px">sm</div>
+          <div class="r" style="border-radius:8px">md</div>
+          <div class="r" style="border-radius:12px">lg</div>
+          <div class="r" style="border-radius:16px">xl</div>
+          <div class="r" style="border-radius:9999px">full</div>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Elevation</div>
+        <div class="elev">
+          <div class="e e1">1</div><div class="e e2">2</div><div class="e e3">3</div><div class="e e4">4</div>
+        </div>
+      </section>
+
+      <section>
+        <div class="lbl">Motion · click to preview</div>
+        <div class="motion-row" onclick="ping(this)"><span class="mlbl">fast 140 · standard</span><div class="track"><div class="dot"></div></div></div>
+        <div class="motion-row" onclick="ping(this)"><span class="mlbl">base 200 · decelerate</span><div class="track"><div class="dot"></div></div></div>
+        <div class="motion-row" onclick="ping(this)"><span class="mlbl">slow 320 · standard</span><div class="track"><div class="dot"></div></div></div>
+      </section>
+
+      <p class="note dark-note">Dark maps primary → 400 (brighter for low-light contrast). Foreground neutral-100 on neutral-950 → 15.4:1. Borders use translucent light over solid dark to read as structure, not noise.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  var EASE={standard:'cubic-bezier(.2,0,0,1)',decelerate:'cubic-bezier(0,0,0,1)'};
+  function ping(row){
+    var dot=row.querySelector('.dot'),track=row.querySelector('.track');
+    var lbl=row.querySelector('.mlbl').textContent;
+    var dur=parseInt(lbl)||200, ease=lbl.indexOf('decelerate')>-1?EASE.decelerate:EASE.standard;
+    var d=track.clientWidth-12;
+    dot.style.transition='none';dot.style.transform='translateX(0)';
+    requestAnimationFrame(function(){
+      dot.style.transition='transform '+dur+'ms '+ease;
+      dot.style.transform='translateX('+d+'px)';
+      setTimeout(function(){dot.style.transition='transform '+dur+'ms '+ease;dot.style.transform='translateX(0)';},dur+120);
+    });
+  }
+</script>
+</body>
+</html>

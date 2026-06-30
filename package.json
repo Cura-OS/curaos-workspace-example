@@ -1,0 +1,12 @@
+{
+  "name": "curaos-workspace",
+  "private": true,
+  "description": "Workspace tooling manifest: exact-pinned devDependencies for the opt-in `just mutate` Stryker recipe (RP-60) and the fast-check property suites under scripts/lib (RP-59, runs in `just ci` test-js). NOT a runtime package; workspace scripts stay dependency-free.",
+  "devDependencies": {
+    "@stryker-mutator/core": "9.6.1",
+    "fast-check": "4.8.0"
+  },
+  "overrides": {
+    "qs": "6.15.2"
+  }
+}

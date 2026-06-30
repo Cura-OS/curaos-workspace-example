@@ -1,0 +1,196 @@
+<!-- @dsCard group="Data" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CuraOS · Data</title>
+<style>
+  :root{
+    --primary-400:#1fb0d4;--primary-500:#0e90b8;--primary-600:#0d7197;--primary-700:#105a7c;
+    --success:#188a4c;--warning:#b3760a;--error:#bb3328;--info:#1276ad;
+    --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Inter','Segoe UI',Roboto,sans-serif;
+    --mono:'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:#eceff0;color:#161b1c;padding:24px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto}
+  .hdr{margin-bottom:24px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--primary-600)}
+  h1{font-size:32px;font-weight:600;letter-spacing:-0.015em;margin:6px 0 4px}
+  .sub{font-size:15px;color:#525c5e;max-width:64ch}
+  .panes{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:980px){.panes{grid-template-columns:1fr}}
+  .pane{border-radius:16px;padding:22px;border:1px solid}
+  .pane.light{background:#f6f8f8;color:#161b1c;border-color:#dde2e3;
+    --bg:#f6f8f8;--fg:#161b1c;--muted:#525c5e;--sub:#6e797b;--line:#dde2e3;--surf:#fff;--hover:#f6f8f8;--sel:#e8fbff;
+    --pri:var(--primary-600);--grid:#eceff0;
+    --suc:var(--success);--suc-bg:#e7f8ec;--warn:var(--warning);--warn-bg:#fdf4e3;--err:var(--error);--err-bg:#fdeceb;--inf:var(--info);--inf-bg:#e8f4fb}
+  .pane.dark{background:#0d1112;color:#eceff0;border-color:#2c3537;
+    --bg:#0d1112;--fg:#eceff0;--muted:#9aa5a7;--sub:#6e797b;--line:#2c3537;--surf:#161b1c;--hover:#1a201f;--sel:#0a2030;
+    --pri:var(--primary-400);--grid:#262d2e;
+    --suc:#52c47f;--suc-bg:#0f2e1d;--warn:#ecae35;--warn-bg:#352608;--err:#e5746c;--err-bg:#3a1714;--inf:#52ade0;--inf-bg:#0c2e44}
+  .pane-tag{font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;opacity:.6;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  .pane-tag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--primary-500)}
+  .lbl{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0;color:var(--sub);opacity:1;margin:20px 0 10px;display:flex;align-items:center;gap:8px}
+  .lbl::before{content:"";width:14px;height:1px;background:var(--line)}
+  .lbl:first-of-type{margin-top:0}
+  /* KPI */
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .kpi .k-lbl{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--sub)}
+  .kpi .k-val{font-size:26px;font-weight:600;letter-spacing:-0.02em;margin:4px 0 2px;font-variant-numeric:tabular-nums}
+  .kpi .k-delta{font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:3px}
+  .up{color:var(--suc)}.down{color:var(--err)}.flat{color:var(--sub)}
+  .k-delta svg{width:12px;height:12px;stroke:currentColor;stroke-width:2.5;fill:none}
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:13px;background:var(--surf);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  thead th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--sub);
+    padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none;white-space:nowrap}
+  thead th:hover{color:var(--fg)}
+  thead th .arr{opacity:.35;font-size:9px}
+  thead th[aria-sort] .arr{opacity:1;color:var(--pri)}
+  tbody td{padding:9px 12px;border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr{transition:background .12s}
+  tbody tr:hover{background:var(--hover)}
+  tbody tr.sel{background:var(--sel)}
+  td.num{text-align:right;font-family:var(--mono);font-size:12px}
+  .st{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:9999px}
+  .st::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .st-ok{color:var(--suc);background:var(--suc-bg)}.st-warn{color:var(--warn);background:var(--warn-bg)}
+  .st-err{color:var(--err);background:var(--err-bg)}.st-inf{color:var(--inf);background:var(--inf-bg)}
+  .ten{display:flex;align-items:center;gap:9px}
+  .av{width:26px;height:26px;border-radius:7px;background:var(--pri);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:600;flex-shrink:0}
+  .pane.dark .av{color:#0d1112}
+  /* pagination */
+  .pag{display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:12px;color:var(--sub)}
+  .pag-btns{display:flex;gap:4px}
+  .pag-btns button{min-width:30px;height:30px;border:1px solid var(--line);background:var(--surf);color:var(--fg);
+    border-radius:7px;cursor:pointer;font-family:inherit;font-size:12px}
+  .pag-btns button:hover{border-color:var(--pri)}
+  .pag-btns button.cur{background:var(--pri);color:#fff;border-color:var(--pri)}
+  .pane.dark .pag-btns button.cur{color:#0d1112}
+  /* charts */
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .chart{background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .chart .c-hd{font-size:12px;font-weight:600;margin-bottom:2px}
+  .chart .c-su{font-size:11px;color:var(--sub);margin-bottom:8px}
+  .chart svg{width:100%;display:block}
+  .bars{display:flex;align-items:flex-end;gap:6px;height:64px}
+  .bars i{flex:1;background:var(--pri);border-radius:3px 3px 0 0;opacity:.85}
+  .full{grid-column:1/-1}
+
+  /* responsive: desktop / tablet / mobile */
+  @media(max-width:680px){
+    body{padding:16px}
+    .wrap{padding:0}
+    h1{font-size:26px}
+    .pane{padding:18px 16px}
+    .twocol{grid-template-columns:1fr!important}
+    .kpis{grid-template-columns:1fr 1fr!important}
+    .charts,.cards{grid-template-columns:1fr!important}
+    .dp{width:100%!important}
+  }
+  @media(max-width:400px){ .kpis{grid-template-columns:1fr!important} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="eyebrow">CuraOS · Aqua</div>
+    <h1>Data</h1>
+    <p class="sub">Sortable table with row states + selection, pagination, KPI stat cards with trend deltas, and chart containers (line / bar / donut). Numerics are tabular mono; status uses semantic tokens, never primary.</p>
+  </div>
+  <div class="panes" id="panes">
+    <div class="pane light"><div class="pane-tag">Light</div><div class="content"></div></div>
+    <div class="pane dark"><div class="pane-tag">Dark</div><div class="content"></div></div>
+  </div>
+</div>
+
+<script>
+  var UP='<svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></svg>';
+  var DN='<svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>';
+
+  var ROWS=[
+    {n:'Northgate Health',id:'cur_8fa21',stack:'HealthStack',users:1284,uptime:99.98,st:'ok'},
+    {n:'Westform District',id:'cur_22b0c',stack:'EducationStack',users:642,uptime:99.4,st:'warn'},
+    {n:'Bramble ERP Co',id:'cur_71d3e',stack:'ERP',users:318,uptime:97.1,st:'err'},
+    {n:'Lyle Family Clinic',id:'cur_0ac99',stack:'HealthStack',users:88,uptime:100,st:'ok'},
+    {n:'Orion Schools',id:'cur_5e1f7',stack:'EducationStack',users:1530,uptime:99.9,st:'inf'}
+  ];
+  var ST={ok:['st-ok','Healthy'],warn:['st-warn','Degraded'],err:['st-err','Incident'],inf:['st-inf','Provisioning']};
+  function initials(s){return s.split(' ').slice(0,2).map(function(w){return w[0]}).join('');}
+
+  function tableHTML(rows){
+    var b='';
+    rows.forEach(function(r,i){
+      b+='<tr'+(i===0?' class="sel"':'')+' onclick="this.classList.toggle(\'sel\')">'+
+        '<td><div class="ten"><span class="av">'+initials(r.n)+'</span>'+r.n+'</div></td>'+
+        '<td>'+r.stack+'</td>'+
+        '<td class="num">'+r.users.toLocaleString()+'</td>'+
+        '<td class="num">'+r.uptime.toFixed(1)+'%</td>'+
+        '<td><span class="st '+ST[r.st][0]+'">'+ST[r.st][1]+'</span></td></tr>';
+    });
+    return '<table><thead><tr>'+
+      '<th onclick="srt(this,0,\'s\')">Tenant <span class="arr">▲▼</span></th>'+
+      '<th onclick="srt(this,1,\'s\')">Stack <span class="arr">▲▼</span></th>'+
+      '<th onclick="srt(this,2,\'n\')" style="text-align:right">Users <span class="arr">▲▼</span></th>'+
+      '<th onclick="srt(this,3,\'n\')" aria-sort="descending" style="text-align:right">Uptime <span class="arr">▲▼</span></th>'+
+      '<th>Status <span class="arr"></span></th></tr></thead><tbody>'+b+'</tbody></table>';
+  }
+
+  function tpl(){return ''+
+    '<div class="lbl">KPI stat cards</div>'+
+    '<div class="kpis">'+
+      '<div class="kpi"><div class="k-lbl">Active tenants</div><div class="k-val">218</div><div class="k-delta up">'+UP+'12 this week</div></div>'+
+      '<div class="kpi"><div class="k-lbl">Avg uptime</div><div class="k-val">99.7%</div><div class="k-delta up">'+UP+'0.3 pts</div></div>'+
+      '<div class="kpi"><div class="k-lbl">Open incidents</div><div class="k-val">3</div><div class="k-delta down">'+DN+'2 vs last wk</div></div>'+
+      '<div class="kpi"><div class="k-lbl">Seats in use</div><div class="k-val">14,302</div><div class="k-delta flat">-  steady</div></div>'+
+    '</div>'+
+
+    '<div class="lbl">Table · click header to sort, row to select</div>'+
+    tableHTML(ROWS)+
+    '<div class="pag"><span>1-5 of 218 tenants</span><div class="pag-btns">'+
+      '<button>‹</button><button class="cur">1</button><button>2</button><button>3</button><button>…</button><button>44</button><button>›</button></div></div>'+
+
+    '<div class="lbl">Chart containers</div>'+
+    '<div class="charts">'+
+      '<div class="chart"><div class="c-hd">Signups</div><div class="c-su">30-day · line</div>'+
+        '<svg viewBox="0 0 200 60" preserveAspectRatio="none">'+
+        '<polyline fill="none" stroke="var(--pri)" stroke-width="2" points="0,48 25,40 50,44 75,30 100,34 125,20 150,24 175,12 200,16"/>'+
+        '<polygon fill="var(--pri)" opacity=".10" points="0,48 25,40 50,44 75,30 100,34 125,20 150,24 175,12 200,16 200,60 0,60"/></svg></div>'+
+      '<div class="chart"><div class="c-hd">By stack</div><div class="c-su">tenants · bar</div>'+
+        '<div class="bars"><i style="height:80%"></i><i style="height:55%"></i><i style="height:35%"></i><i style="height:65%"></i><i style="height:90%"></i><i style="height:48%"></i></div></div>'+
+      '<div class="chart full"><div class="c-hd">Stack mix</div><div class="c-su">share · donut</div>'+
+        '<div style="display:flex;align-items:center;gap:16px">'+
+        '<svg viewBox="0 0 42 42" style="width:80px;flex-shrink:0">'+
+          '<circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--grid)" stroke-width="6"/>'+
+          '<circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--pri)" stroke-width="6" stroke-dasharray="48 52" stroke-dashoffset="25"/>'+
+          '<circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--inf)" stroke-width="6" stroke-dasharray="30 70" stroke-dashoffset="77"/>'+
+          '<circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--warn)" stroke-width="6" stroke-dasharray="22 78" stroke-dashoffset="47"/></svg>'+
+        '<div style="font-size:12px;line-height:1.9">'+
+          '<div><b style="color:var(--pri)">●</b> HealthStack 48%</div>'+
+          '<div><b style="color:var(--inf)">●</b> Education 30%</div>'+
+          '<div><b style="color:var(--warn)">●</b> ERP 22%</div></div></div></div>'+
+    '</div>';
+  }
+
+  document.querySelectorAll('.content').forEach(function(c){c.innerHTML=tpl();});
+
+  function srt(th,col,type){
+    var tb=th.closest('table').querySelector('tbody');
+    var rows=Array.prototype.slice.call(tb.querySelectorAll('tr'));
+    var asc=th.getAttribute('aria-sort')!=='ascending';
+    th.closest('tr').querySelectorAll('th').forEach(function(h){h.removeAttribute('aria-sort')});
+    th.setAttribute('aria-sort',asc?'ascending':'descending');
+    rows.sort(function(a,b){
+      var x=a.children[col].textContent.trim(),y=b.children[col].textContent.trim();
+      if(type==='n'){x=parseFloat(x.replace(/[^0-9.]/g,''));y=parseFloat(y.replace(/[^0-9.]/g,''));return asc?x-y:y-x;}
+      return asc?x.localeCompare(y):y.localeCompare(x);
+    });
+    rows.forEach(function(r){tb.appendChild(r);});
+  }
+</script>
+</body>
+</html>
