@@ -66,7 +66,7 @@ These are outside the PR diff but are live, tracked files in the repo whose outp
 **Verdict: PASS**
 
 Evidence from `scripts/secret-scan-gate.test.js`:
-- `:37-39` — planted secret uses `ghp_0123456789abcdefABCDEF0123456789wXyZ`, a syntactically valid GitHub PAT shape. The `ghp_` prefix is in gitleaks' default ruleset; it is not `*EXAMPLE*` nor allowlisted in `.gitleaks.toml`.
+- `:37-39` — planted secret uses `ghp_REDACTED_PUBLIC_EXAMPLE`, a syntactically valid GitHub PAT shape. The `ghp_` prefix is in gitleaks' default ruleset; it is not `*EXAMPLE*` nor allowlisted in `.gitleaks.toml`.
 - `:62-67` — positive-control assertion: gate exits non-zero and stdout contains `ghp_` leak report.
 - `:70-75` — clean-tree assertion: gate exits 0 on a staged tree with no secrets.
 - `:77-91` — regression guard: test explicitly invokes `gitleaks git --staged` and asserts the canonical form; reverting to `detect --staged` would call a non-existent flag → non-zero, causing this assertion to fail for the wrong reason. A no-op (skip) would cause exit 0 on the planted-secret case to pass when it shouldn't — the test would go RED on the positive-control assertion.

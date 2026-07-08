@@ -1,5 +1,10 @@
 # CuraOS Workspace Example
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+[![Exposure: Open](https://img.shields.io/badge/exposure-Open-brightgreen)](#license)
+[![Module: Example](https://img.shields.io/badge/module-Example-informational)](#what-is-in-here)
+
+
 A **sanitized, real-world example** of how a multi-agent (Claude Code / Codex / Gemini / OpenCode / Cursor / Aider) software workspace can be organized, governed, and driven. Shared as lessons-learned and a starting template - take what is useful, ignore the rest.
 
 This is **not** a runnable product. It is the *workspace management layer*: the rules, agent contracts, doc graph, local-issue tracking, and orchestration workflows that sit *around* a codebase and coordinate AI agents working on it. The actual product code, specs, and private infrastructure have been removed.
