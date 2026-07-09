@@ -361,7 +361,7 @@ Postmortem = primary source; CONTEXT.md = agent-facing summary.
 
 ### RISK-REGISTER.md (recurring-failure register, BINDING)
 
-[`ai/curaos/docs/RISK-REGISTER.md`](../curaos/docs/RISK-REGISTER.md) holds one row per recurring failure pattern: {pattern, incidents, guard (script/gate path or NONE), last recurrence}.
+`ai/<project>/docs/RISK-REGISTER.md` holds one row per recurring failure pattern: {pattern, incidents, guard (script/gate path or NONE), last recurrence}.
 
 - **Binding:** any lesson recorded twice (memory, HANDOVER, postmortem, session retro) MUST get a register row in the same session that records the second occurrence.
 - Rows with guard = NONE older than 3 sessions auto-convert to staged foresight issues per [[curaos-foresight-rule]] (LESSON-mining sweep, remediation item RP-45; manual conversion applies until that sweep lands).
