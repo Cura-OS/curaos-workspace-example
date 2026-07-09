@@ -153,7 +153,7 @@ gate regardless.
 
 ## Runbook
 
-Full operator + agent procedure: [`ai/curaos/docs/ci-local.md`](../curaos/docs/ci-local.md).
+Full operator + agent procedure: `ai/<project>/docs/ci-local.md`.
 
 Per [[curaos-memory-agents-sync-rule]]: this rule add propagates to memory (slug pointer only) +
 `ai/rules/README.md` index + `AGENTS.md §15`.

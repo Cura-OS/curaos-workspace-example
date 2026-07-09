@@ -25,7 +25,7 @@ Bug + Spike attach at any level (typically Story or Task layer).
 ```
 
 **Hard rules:**
-- Target Version is the top planning gate; v1 = M1-M17 (the GA working set). Every Epic/Story (and `foresight` issue) carries a `Target Version` Project field. Work too big for the active version is filed against a future version, never dropped or crammed. See [[curaos-version-planning-rule]] + [ADR-0215](../curaos/docs/adr/0215-version-gated-planning.md).
+- Target Version is the top planning gate; v1 = M1-M17 (the GA working set). Every Epic/Story (and `foresight` issue) carries a `Target Version` Project field. Work too big for the active version is filed against a future version, never dropped or crammed. See [[curaos-version-planning-rule]] plus the stripped private ADR-0215 decision record.
 - Initiatives + Epics live ONLY in `curaos-ai-workspace`
 - Stories + Tasks live in owning submodule repo (cross-repo sub-issue link to Epic)
 - Cycles are goal-gated single-select Project field; admin adds/closes as initiative goals shift
