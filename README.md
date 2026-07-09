@@ -9,6 +9,16 @@ A **sanitized, real-world example** of how a multi-agent (Claude Code / Codex / 
 
 This is **not** a runnable product. It is the *workspace management layer*: the rules, agent contracts, doc graph, local-issue tracking, and orchestration workflows that sit *around* a codebase and coordinate AI agents working on it. The actual product code, specs, and private infrastructure have been removed.
 
+## At a Glance
+
+| Field | Detail |
+|---|---|
+| Audience | Engineering teams adopting multi-agent workspace governance. |
+| Homepage | [docs.curaos.abualruz.com](https://docs.curaos.abualruz.com) |
+| Exposure | Open sanitized example. |
+| License | MIT. |
+| Security | No secrets, product code, customer data, or private infrastructure are included. |
+
 ## What is in here
 
 | Path | What it is |
