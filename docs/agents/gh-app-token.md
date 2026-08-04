@@ -6,6 +6,10 @@ at 12,500/hr (this org sits around 10k+/hr). The agent-authorable half is the to
 helper at `scripts/gh-app-token` (logic + tests in `scripts/lib/gh-app-token.js`); the
 App registration itself is an OPERATOR step and is never performed by an agent.
 
+The same App now carries a second role: its installation token is the push credential
+for the self-hosted Weblate instance, replacing a human account SSH key. See
+"Second role: Weblate push credential" and the drift audit below it.
+
 ## Using the helper
 
 ```bash
@@ -76,12 +80,13 @@ admin authority and is tracked as a `ready-for-human` issue.
    | Permission | Level | Justification |
    |---|---|---|
    | Issues | Read and write | issue queue mutations: labels, comments, close, sub-issue wiring |
-   | Projects (organization) | Read and write | CuraOS Roadmap board reads + Status/Milestone field sync |
+   | Projects (organization) | Read and write | roadmap board reads + Status/Milestone field sync |
    | Pull requests | Read | PR verification reads (reviews, threads, merge state); merges stay on operator-blessed auth |
+   | Contents | Read and write | the App installation token is the i18n push credential: the self-hosted Weblate instance mints it per git operation and pushes translation commits to the localized repos (see "Second role: Weblate push credential" below) |
    | Metadata | Read | mandatory baseline for any App |
 
-   Nothing else. No Contents write, no Actions, no Administration. If a future item
-   needs more, it amends this table in its own PR with its own justification.
+   Nothing else. No Actions, no Administration, no Secrets, no Workflows. If a future
+   item needs more, it amends this table in its own PR with its own justification.
 3. Install the App on ALL repositories of the org (the per-repo bonus above 20 repos is
    what raises the ceiling).
 4. Generate a private key (App settings -> Private keys -> Generate). Move it to
@@ -106,6 +111,99 @@ admin authority and is tracked as a `ready-for-human` issue.
 
    The `limit` field must show the raised ceiling (>5,000). That pasted output is the
    acceptance evidence for the ceiling-raise issue.
+
+## Second role: Weblate push credential
+
+The App is no longer only a REST ceiling raise. The self-hosted Weblate instance pushes
+translation commits back to the localized repos, and it does so with an installation
+token from THIS App. That is why `Contents: read and write` is now in the charter table.
+
+Why not something narrower:
+
+- **Deploy keys**: disabled org-wide. `POST /repos/<org>/<repo>/keys` returns 422, so
+  there is no per-repo key path.
+- **A user SSH key**: this is what it replaced. A key on a human account carries that
+  human's entire reach, so a translation bot could push to every repo the person can
+  touch. Blast radius is the account, not the localized repos.
+- **A PAT**: cannot be minted through the API, so the bot cannot be self-serve.
+
+An installation token is the only credential that is API-mintable, short-lived
+(60 minutes), and scoped to the installation rather than to a person.
+
+Wiring on the Weblate host, for reference:
+
+- A git credential helper on the Weblate data volume signs an RS256 App JWT with the
+  App private key and exchanges it for an installation token on every git operation.
+  It writes `username=x-access-token` plus the token to stdout and persists nothing.
+- Weblate's global git config points `credential.helper` at that script and pins
+  `credential.https://github.com.username` to `x-access-token`.
+- All component remotes must be `https://`, not `ssh://`. An `ssh://` remote bypasses
+  the credential helper entirely and silently falls back to whatever key is on the
+  data volume.
+
+Two traps when verifying this by hand, both of which produce a false failure:
+
+- Weblate does NOT run git with the container's login `HOME`. Its VCS layer builds a
+  cleaned environment with `HOME` set to `<DATA_DIR>/home`, so the global git config
+  it reads is `<DATA_DIR>/home/.gitconfig`. A plain `docker exec` gets the login
+  `HOME` instead, finds no credential helper, and fails with
+  "could not read Username for https://github.com". Reproduce with
+  `docker exec <container> env HOME=<DATA_DIR>/home git push`.
+- The same cleaned environment keeps the inherited `PATH` and prepends the interpreter
+  directory, so the helper's `python3` resolves to the Weblate virtualenv. Forcing
+  `PATH` back to a bare `/bin:/usr/bin:/usr/local/bin` breaks the helper with
+  "python3: command not found", which is a test artifact and not a defect.
+
+If Weblate is upgraded, prefer its native GitHub App support (`weblate.vcs.github`
+mints installation tokens itself and injects them per git command through
+`http.extraHeader`) over the bespoke credential helper, and delete the helper.
+
+## Installation drift: what is registered vs what is chartered
+
+The live installation does not match the table above and must be trimmed by the org
+owner in the GitHub UI. Agents never change an installation. Audit findings:
+
+| Property | Live | Chartered |
+|---|---|---|
+| Permission count | 78 | 5 |
+| `repository_selection` | `all` | `all` (correct, the ceiling raise needs it) |
+| Repositories | every repo in the org | same |
+
+Live grants that are not in the charter and should be removed include
+`administration: write`, `organization_administration: write`, `members: write`,
+`secrets: write`, `organization_secrets: write`, `workflows: write`, `actions: write`,
+`organization_hooks: write`, `repository_hooks: write`, `packages: write`,
+`environments: write`, `deployments: write`, `security_events: write`, and the whole
+Codespaces, Copilot, and Dependabot families. `organization_projects` is granted at
+`admin` where the charter asks for write, and `organization_custom_properties` is
+granted at `admin` where the charter asks for nothing.
+
+Target set, exactly: `metadata: read`, `issues: write`, `organization_projects: write`,
+`pull_requests: read`, `contents: write`. Everything else set to no access.
+
+What trimming to that set breaks:
+
+- **Nothing in the token helper.** The REST ceiling is a function of installed
+  repository count, not of permission count, so the raised limit survives the trim.
+- **Nothing in Weblate.** It needs `contents: write` plus `metadata: read`, both kept.
+- **Nothing in CI.** Workflows authenticate with the Actions-provided `GITHUB_TOKEN`,
+  not with this App.
+- **Nothing in the current agent scripts**, which reach GitHub through the keyring
+  auth (`env -u GITHUB_TOKEN gh`) rather than through an installation token.
+- It WOULD break any future use of the App token to change repository settings or
+  branch protection (`administration`), to write Actions or Dependabot secrets
+  (`secrets`), to dispatch or rerun workflows (`actions`), to push a commit that
+  touches `.github/workflows/` (`workflows`), to post commit statuses or checks
+  (`statuses`, `checks`), or to delete a project or edit its admin settings
+  (`organization_projects: admin`). None of those callers exist today; each one
+  amends the charter table in its own PR before it is granted.
+
+Re-audit the live grant at any time with an App JWT:
+
+```bash
+gh api /app/installations/<installation-id> \
+  --jq '{repos: .repository_selection, count: (.permissions | length), permissions}'
+```
 
 ## Key rotation procedure
 
