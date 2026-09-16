@@ -5,7 +5,7 @@
 # This is the DURABLE answer to the recurring "merged-PR notifications pile up"
 # leak. The per-PR `mark-pr-notification-done` clears ONE PR; this script
 # re-scans the entire inbox and applies the safe-to-clear predicate to each PR
-# notification, so a single command drains everything that has gone terminal —
+# notification, so a single command drains everything that has gone terminal -
 # regardless of whether the PR was merged through the pr-verify-merge workflow,
 # a direct `gh pr merge`, or the GitHub UI, and regardless of the post-merge
 # `state_change` re-notification. It does NOT depend on an orchestrator
@@ -13,11 +13,11 @@
 # converges.
 #
 # safe-to-clear-notification predicate (a PR notification is cleared iff ALL):
-#   1. terminal state            — PR is merged OR closed (not open)
-#   2. threads resolved-or-moot  — zero UNRESOLVED review threads, UNLESS
+#   1. terminal state            - PR is merged OR closed (not open)
+#   2. threads resolved-or-moot  - zero UNRESOLVED review threads, UNLESS
 #      --allow-unresolved is passed (then unresolved-but-all-OUTDATED counts as
 #      moot; a non-outdated unresolved thread still blocks). Default: any
-#      unresolved thread blocks (fail-closed — surfaces real findings).
+#      unresolved thread blocks (fail-closed - surfaces real findings).
 #   3. no needs-human            - no unresolved thread where any of the last
 #      10 comments marks it escalated (`needs-human` / "needs human").
 #   4. lookup integrity          - the reviewThreads GraphQL call succeeded AND
@@ -32,7 +32,7 @@
 # Usage:
 #   sweep-pr-notifications [--apply] [--allow-unresolved]
 #
-# Exit: 0 always (a held notification is not an error — it is the point).
+# Exit: 0 always (a held notification is not an error - it is the point).
 set -uo pipefail
 
 APPLY=0
@@ -52,7 +52,7 @@ OWNER="your-org"
 
 NOTIFS="$(gh_api /notifications --paginate 2>/dev/null)"
 COUNT="$(printf '%s' "$NOTIFS" | jq 'length')"
-echo "inbox: ${COUNT} notification(s)$([ "$APPLY" -eq 0 ] && echo '  [DRY-RUN — pass --apply to clear]')" >&2
+echo "inbox: ${COUNT} notification(s)$([ "$APPLY" -eq 0 ] && echo '  [DRY-RUN - pass --apply to clear]')" >&2
 
 CLEARED=0
 HELD=0
@@ -65,7 +65,7 @@ while IFS=$'\t' read -r TID REPO_FULL PR; do
   # 1. terminal state
   read -r STATE MERGED < <(gh_api "repos/${REPO_FULL}/pulls/${PR}" --jq '"\(.state) \(.merged)"' 2>/dev/null)
   if [ "$STATE" != "closed" ]; then
-    echo "  HELD  ${REPO}#${PR} — open (not terminal)" >&2
+    echo "  HELD  ${REPO}#${PR} - open (not terminal)" >&2
     HELD=$((HELD+1)); continue
   fi
 
@@ -88,7 +88,7 @@ while IFS=$'\t' read -r TID REPO_FULL PR; do
   NEEDS_HUMAN="$(printf '%s' "$THREADS_JSON" | jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)|select(any(.comments.nodes[]; (.body // "")|test("needs-human|needs human";"i")))]|length' 2>/dev/null)"
 
   if [ "${NEEDS_HUMAN:-0}" -gt 0 ]; then
-    echo "  HELD  ${REPO}#${PR} — ${NEEDS_HUMAN} needs-human thread(s)" >&2
+    echo "  HELD  ${REPO}#${PR} - ${NEEDS_HUMAN} needs-human thread(s)" >&2
     HELD=$((HELD+1)); continue
   fi
 
@@ -101,17 +101,17 @@ while IFS=$'\t' read -r TID REPO_FULL PR; do
     BLOCKING="${UNRESOLVED_TOTAL:-0}"
   fi
   if [ "${BLOCKING:-0}" -gt 0 ]; then
-    echo "  HELD  ${REPO}#${PR} — ${BLOCKING} unresolved review thread(s) (merged=${MERGED}); resolve-or-capture before clearing" >&2
+    echo "  HELD  ${REPO}#${PR} - ${BLOCKING} unresolved review thread(s) (merged=${MERGED}); resolve-or-capture before clearing" >&2
     HELD=$((HELD+1)); continue
   fi
 
-  # Passes the predicate — clear (or report in dry-run).
+  # Passes the predicate - clear (or report in dry-run).
   if [ "$APPLY" -eq 1 ]; then
     if gh_api --method DELETE "/notifications/threads/${TID}" >/dev/null 2>&1; then
       echo "  CLEAR ${REPO}#${PR} (merged=${MERGED})" >&2
       CLEARED=$((CLEARED+1))
     else
-      echo "  WARN  ${REPO}#${PR} — DELETE failed" >&2
+      echo "  WARN  ${REPO}#${PR} - DELETE failed" >&2
       HELD=$((HELD+1))
     fi
   else

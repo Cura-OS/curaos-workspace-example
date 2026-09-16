@@ -206,4 +206,4 @@ test("local-issues CLI exits quietly when stdout pipe closes early", (t) => {
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.doesNotMatch(result.stderr, /EPIPE|Unhandled 'error'/);
-});
+}, 30000); // seeding 300 rows spawns sqlite3 300x; generous budget for a loaded I/O-bound runner

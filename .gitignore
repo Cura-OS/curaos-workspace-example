@@ -8,6 +8,7 @@ node_modules/
 *.tsbuildinfo
 
 # Local agent / orchestration scratch
+.agent-workflow-kit/runs/
 .scratch/
 .scratch-*/
 .worktrees/

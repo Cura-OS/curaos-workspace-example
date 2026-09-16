@@ -9,9 +9,9 @@ const path = require("node:path");
 const bundleLib = require("./lane-context-bundle.js");
 
 test("laneSlug and bundlePathFor derive the .scratch/<lane>/context-bundle.md path", () => {
-  expect(bundleLib.laneSlug("your-org/curaos#123")).toBe("cura-care-oriented-stack-curaos-123");
+  expect(bundleLib.laneSlug("your-org/curaos#123")).toBe("your-org-curaos-123");
   expect(bundleLib.bundlePathFor("your-org/curaos#123")).toBe(
-    ".scratch/cura-care-oriented-stack-curaos-123/context-bundle.md",
+    ".scratch/your-org-curaos-123/context-bundle.md",
   );
   expect(bundleLib.bundlePathFor("", ".scratch")).toBe("");
 });

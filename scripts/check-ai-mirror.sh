@@ -13,6 +13,20 @@ WS="${CHECK_AI_MIRROR_WS:-$(cd "$(dirname "$0")/.." && pwd)}"
 REAL="$WS/curaos"
 AI="$WS/ai/curaos"
 
+if [ ! -d "$WS" ]; then
+  echo "ERROR: missing workspace root $WS"
+  exit 2
+fi
+
+# A sanitized example has no curaos/ code submodule (and thus no ai/curaos/ mirror);
+# there is nothing to mirror-check, so skip cleanly. This matches how check-docs.sh
+# skips the doc graph when the private curaos submodule is unavailable. Only ONE side
+# present is still real drift and fails closed below.
+if [ ! -d "$REAL" ] && [ ! -d "$AI" ]; then
+  echo "check-ai-mirror: no curaos/ submodule and no ai/curaos/ mirror; nothing to check (sanitized example)"
+  exit 0
+fi
+
 if [ ! -d "$REAL" ] || [ ! -d "$AI" ]; then
   echo "ERROR: missing $REAL or $AI"
   exit 2

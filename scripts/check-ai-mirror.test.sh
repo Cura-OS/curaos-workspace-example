@@ -105,6 +105,29 @@ else
   nok "missing workspace" "$out"
 fi
 
+# 6) sanitized example: workspace exists with an ai/ tree but no curaos/ submodule
+#    and no ai/curaos/ mirror -> skip cleanly (exit 0), do NOT fail closed
+WS6="$TMP/ws6"
+mkdir -p "$WS6/ai/example"
+out="$(run "$WS6")"
+if printf '%s' "$out" | grep -q 'nothing to check (sanitized example)' \
+  && printf '%s' "$out" | grep -q 'EXIT=0'; then
+  ok "no curaos submodule -> skip clean (exit 0)"
+else
+  nok "sanitized example skip" "$out"
+fi
+
+# 7) half-present mirror is still real drift: curaos/ absent but ai/curaos/ present
+WS7="$TMP/ws7"
+mkdir -p "$WS7/ai/curaos/backend"
+out="$(run "$WS7")"
+if printf '%s' "$out" | grep -q 'ERROR: missing' \
+  && printf '%s' "$out" | grep -q 'EXIT=2'; then
+  ok "one-sided mirror (ai/curaos only) fails closed (exit 2)"
+else
+  nok "one-sided mirror" "$out"
+fi
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

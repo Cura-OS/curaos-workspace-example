@@ -1,0 +1,62 @@
+---
+description: "Every uncovered edge case in scaffolded/generated code feeds back into the corresponding generator - backend or frontend - so future scaffolds cover it natively"
+paths:
+  - "curaos/tools/codegen/**"
+  - "curaos/backend/services/**"
+  - "curaos/backend/packages/**"
+  - "curaos/frontend/apps/**"
+  - "curaos/frontend/packages/**"
+---
+<!-- GENERATED: rule-view (node scripts/generate-rule-index.js --write); source: ai/rules/curaos_generator_evolution_rule.md -->
+
+# CuraOS Generator-Evolution Rule
+
+Canonical rule: every edge case surfaced inside a generated service/package MUST be folded back into the generator that produced it. Generators are living tools, not one-shot scaffolders.
+
+**User directive (binding, 2026-06-08; strengthened 2026-06-25): always fix the shared owner first.** When VERIFICATION surfaces a defect in GENERATED output (a render that does not match intent; a generated chart/values/schema/SDK that a consumer profile relies on), root-cause the generator, SDK, or contract owner before touching an individual app or service. The fix lands in the GENERATOR/SDK/CONTRACT (template/emitter/CLI flag/package/contract), then regenerate, rework the consumers, and re-verify ALL downstream profiles. A local hot-fix of the generated artifact is NEVER the fix; it leaves the mold defective and masks the silent failure for the next profile. A per-app or per-service manual patch is last resort only after proving no shared owner can express it, and that proof must be documented in the change.
+
+**User directive (binding, 2026-06-25): demo data is database data.** App-visible demo/sample data for local dev, public demos, live verification, and deployed sites MUST be persisted through service-owned database seeds or fixtures. Frontend/API mocks are allowed only for unit tests and CI e2e harnesses. If a generated app or service relies on a runtime mock plane for demo data, the shared fix belongs in the generator, SDK, contract, or service seed owner: emit CI-only mocks for tests and database-backed seeds for runtime/demo.
+
+## The Rule
+
+When a worker (or reviewer, or orchestrator) hits an edge case inside a generated service/package that the generator did NOT cover, the change set for that issue MUST include BOTH:
+
+1. The local fix inside the service/package (unblocks current work).
+2. A corresponding generator update - template, post-scaffold hook, playbook, or codegen-tool flag - that emits the fix as the new default for every future scaffold.
+
+If the generator update is too large for the same PR, file a follow-up issue against the generator under the same milestone with `priority=critical` and `requires=` set to the current Story, and add `ready-for-agent` only after the local fix lands.
+
+**Why:** Generators are the injection-molding presses for CuraOS ([[curaos-architecture-vision]]). A press that produces a defective part once will produce defective parts forever unless the mold is updated. The local hot-fix is necessary; the mold update is non-negotiable. Otherwise every future service repeats the same edge-case fix.
+
+## Applies To
+
+- **Backend codegen** - `curaos/tools/codegen/` (M6 hybrid Nx + @turbo/gen + ts-morph + Bun scripts). Targets all three layers per [[curaos-architecture-vision]]: `<name>-core-service`, `personal-<name>-service`, `business-<name>-service`, and any vertical overlay variant generated alongside.
+- **Frontend codegen** - same `curaos/tools/codegen/` harness; templates under `templates/app-*`, `templates/package-*`, `templates/agent-docs/*`. RN/Web/Tauri targets included.
+- **Workflow / BPM templates** - M5 workflow definitions emitted via codegen.
+- **Contract / SDK packages**: `@curaos/*-contracts`, `@curaos/*-sdk` packages emitted from Drizzle introspection or TypeSpec.
+- **Deploy / chart codegen**: umbrella + per-service Helm chart emitters (`umbrella-emit.ts` and siblings). Subchart `condition:` gating + a generated `values.yaml` (default-on) so each consumer profile (demo-slice, full-bundle) renders only its declared slice. A subchart list with no condition gating and no values.yaml renders the full platform for every profile and the per-profile trim is silently non-functional.
+- **Any future generator** - once a generator owns a class of output, this rule binds.
+
+## What Counts As An Edge Case
+
+The rule fires when any of these holds inside a generated code/doc tree:
+
+- Missing import / re-export that every consumer must add by hand.
+- Missing config block (lefthook hook, `.npmrc` line, `package.json` field, `tsconfig.json` flag, drizzle.config option).
+- Missing test scaffold or fixture every service needs.
+- Workspace boundary regression (generated code violates [[curaos-repo-boundary-rule]] / [[curaos-modulith-standalone-rule]] / [[curaos-ai-mirror-rule]]).
+- Generated file contains a TODO/placeholder that ships in production code paths and is silently ignored.
+- Generated frontend/API mock data is used as a runtime/demo data source instead of test-only/CI-only harness data.
+- Silently non-functional generated artifact: the file is present and well-formed but does not honor the consumer profile that depends on it (e.g. a profile-scoped trim that still renders the full output, a `condition:`-less subchart, a values default that no profile overrides). The artifact looks done; the behavior is wrong. VERIFICATION (rendering every profile, not just the default) is what catches this class.
+- AppModule wire-up gap (ts-morph anchor missing, barrel export missing).
+- Frontmatter or AGENTS.md/CONTEXT.md/Requirements.md drift from [[curaos-agents-md-schema-rule]].
+- Cross-layer trio asymmetry: a fix lands in `*-core-service` template but never in `personal-*` / `business-*` / `healthstack-*` template.
+- Missing CI guard (dep-cruiser rule, syncpack range, knip exclusion, PHI scan).
+- Lockfile + `bun install` re-resolution failure caused by template-emitted `package.json` shape.
+- Sandbox/lefthook closeout breakage (nested submodule untracked content stash failure, transient `node_modules` typecheck flake).
+
+If a worker handles it locally without folding back to the generator, the generator stays defective. The next service hits the same wall.
+
+Also BINDING below the fold: the in-flight generator/SDK barrier (downstream-milestone dispatch BLOCKED while any codegen/SDK/contracts lane carries `agent-claimed:*` or `agent-PR-open`; summary in AGENTS.md section 8) and the trio + frontend-parity + downstream-profile re-verification steps.
+
+Binding core only. Full rule + rationale: ai/rules/curaos_generator_evolution_rule.md (canonical; edit there, then run node scripts/generate-rule-index.js --write).
