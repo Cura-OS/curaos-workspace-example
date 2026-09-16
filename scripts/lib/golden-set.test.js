@@ -1,7 +1,8 @@
 // scripts/lib/golden-set.test.js
 // RP-58: golden-set integrity self-check + judge-drift comparison.
-// Runner: bun test. Offline: the only filesystem touched is the committed golden set,
-// the grills archive (read-only existence checks), and a tmp dir for CLI runs.
+// Runner: bun test. Offline + hermetic: pure-function checks over synthetic sets plus a
+// tmp dir for CLI arg-handling. The committed grill archive is workspace-internal and is not
+// shipped in this sanitized example, so its data-backed acceptance tests live in the parent.
 const { test, expect, beforeEach, afterEach } = require("bun:test");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -19,11 +20,8 @@ const {
 } = require("./golden-set.js");
 
 const root = path.resolve(__dirname, "../..");
-const goldenSetPath = path.join(root, "ai/curaos/docs/grills/golden-set/golden-set.json");
-const archiveDir = path.join(root, "ai/curaos/docs/grills");
 const cliPath = path.join(root, "scripts/check-golden-set.js");
 
-const realSet = () => JSON.parse(fs.readFileSync(goldenSetPath, "utf8"));
 
 function perfectVerdicts(set) {
   const verdicts = {};
@@ -68,33 +66,6 @@ test("normalizeVerdict maps grill vocabulary onto pass/fail and rejects the rest
   expect(normalizeVerdict("approve-with-conditions")).toBe(null);
   expect(normalizeVerdict("")).toBe(null);
   expect(normalizeVerdict(undefined)).toBe(null);
-});
-
-// --- validateGoldenSet: the committed golden set is the acceptance surface ---
-
-test("committed golden set passes the structural self-check against the real archive", () => {
-  const problems = validateGoldenSet(realSet(), { archiveDir, rootDir: root });
-  expect(problems).toEqual([]);
-});
-
-test("committed golden set stays inside the 20-30 curation band with both classes covered", () => {
-  const set = realSet();
-  expect(set.entries.length).toBeGreaterThanOrEqual(MIN_ENTRIES);
-  expect(set.entries.length).toBeLessThanOrEqual(MAX_ENTRIES);
-  const fails = set.entries.filter((entry) => entry.label === "fail").length;
-  const passes = set.entries.filter((entry) => entry.label === "pass").length;
-  expect(fails).toBeGreaterThanOrEqual(MIN_PER_CLASS);
-  expect(passes).toBeGreaterThanOrEqual(MIN_PER_CLASS);
-});
-
-test("every committed entry cites a real, non-stub grill report", () => {
-  const { isBlockedStubReport } = require("./grill-fixture-quarantine.js");
-  for (const entry of realSet().entries) {
-    const reportPath = path.join(archiveDir, entry.grill_report);
-    expect(fs.existsSync(reportPath)).toBe(true);
-    const content = fs.readFileSync(reportPath, "utf8");
-    expect(isBlockedStubReport(content)).toBe(false);
-  }
 });
 
 test("validateGoldenSet flags missing judge pin, bad threshold, and bad labels", () => {
@@ -197,44 +168,6 @@ afterEach(() => {
 function runCli(args) {
   return spawnSync(process.execPath, [cliPath, ...args], { encoding: "utf8" });
 }
-
-test("CLI self-check exits 0 on the committed golden set", () => {
-  const result = runCli([]);
-  expect(result.status).toBe(0);
-  expect(result.stdout).toContain("golden set ok");
-});
-
-test("CLI exits 0 when judge verdicts match labels", () => {
-  const verdictsPath = path.join(tmpDir, "verdicts.json");
-  fs.writeFileSync(verdictsPath, JSON.stringify(perfectVerdicts(realSet())));
-  const result = runCli(["--verdicts", verdictsPath]);
-  expect(result.status).toBe(0);
-  expect(result.stdout).toContain("drift ok");
-});
-
-test("CLI exits nonzero when judge verdicts diverge beyond the threshold", () => {
-  const set = realSet();
-  const verdicts = perfectVerdicts(set);
-  const flipCount = Math.floor(set.entries.length * set.divergence_threshold) + 1;
-  for (const entry of set.entries.slice(0, flipCount)) {
-    verdicts[entry.id] = entry.label === "pass" ? "fail" : "pass";
-  }
-  const verdictsPath = path.join(tmpDir, "verdicts.json");
-  fs.writeFileSync(verdictsPath, JSON.stringify(verdicts));
-  const result = runCli(["--verdicts", verdictsPath]);
-  expect(result.status).toBe(1);
-  expect(result.stderr).toContain("GOLDEN-SET DRIFT");
-});
-
-test("CLI exits nonzero on a structurally broken golden set", () => {
-  const broken = realSet();
-  delete broken.judge;
-  const brokenPath = path.join(tmpDir, "broken.json");
-  fs.writeFileSync(brokenPath, JSON.stringify(broken));
-  const result = runCli(["--golden-set", brokenPath]);
-  expect(result.status).toBe(1);
-  expect(result.stderr).toContain("judge.model");
-});
 
 test("CLI rejects unknown arguments and bad thresholds with exit 2", () => {
   expect(runCli(["--nope"]).status).toBe(2);

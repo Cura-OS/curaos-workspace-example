@@ -4,7 +4,10 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const root = process.env.DOC_GRAPH_ROOT ? path.resolve(process.env.DOC_GRAPH_ROOT) : path.resolve(__dirname, "..");
-const graphPath = path.join(root, "ai/curaos/docs/DOC-GRAPH.md");
+// The doc graph is emitted into this workspace's agent mirror. In the full product
+// workspace that mirror is ai/curaos/; this sanitized example ships ai/example/ instead
+// (there is no curaos/ code submodule here), so the graph lives under ai/example/docs/.
+const graphPath = path.join(root, "ai/example/docs/DOC-GRAPH.md");
 const write = process.argv.includes("--write");
 
 const ignoreParts = new Set([".git", "node_modules", "dist", "build", ".turbo"]);
@@ -117,7 +120,7 @@ function listMarkdown() {
 
   return files
     .filter((file) => !file.split("/").some((part) => ignoreParts.has(part)))
-    .filter((file) => file !== "ai/curaos/docs/DOC-GRAPH.md")
+    .filter((file) => file !== "ai/example/docs/DOC-GRAPH.md")
     .sort();
 }
 

@@ -52,8 +52,9 @@ function isBlockedStubReport(content) {
 // live archive (fixtures belong under scripts/test-fixtures/grills/).
 function scanGrillArchive(dir, fsLike) {
   const fsImpl = fsLike || require("node:fs");
-  const names = fsImpl
-    .readdirSync(dir)
+  // An absent archive carries zero reports (the sanitized example ships no live grill archive);
+  // treat it as empty rather than throwing so callers (milestone-wave, quarantine scan) stay green.
+  const names = (fsImpl.existsSync && !fsImpl.existsSync(dir) ? [] : fsImpl.readdirSync(dir))
     .filter((name) => name.endsWith(".md") && name !== "README.md")
     .sort();
   const blockedStubs = [];

@@ -1,0 +1,14 @@
+---
+description: "Backend services ship as `bun build --compile` single binaries on a shared runtime base; one canonical compile-flags source shared by local verify + image build + CI; coding constraints that keep services compile-safe; native-addon (.node) escape; mandatory local smoke test with the SAME compile flags before any image build"
+paths:
+  - "curaos/backend/services/**"
+  - "curaos/tools/codegen/templates/service-*/Dockerfile.hbs"
+  - "curaos/tools/codegen/src/live-emit.ts"
+  - "curaos/tools/build/**"
+  - "curaos/backend/services/**/src/main.ts"
+---
+<!-- GENERATED: rule-view (node scripts/generate-rule-index.js --write); source: ai/rules/curaos_bun_compile_rule.md -->
+
+# Bun compile packaging rule
+
+Binding core only. Full rule + rationale: ai/rules/curaos_bun_compile_rule.md (canonical; edit there, then run node scripts/generate-rule-index.js --write).

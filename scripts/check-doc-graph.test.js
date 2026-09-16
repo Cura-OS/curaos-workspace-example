@@ -23,7 +23,7 @@ function initWorkspace(t) {
   writeFile(tempRoot, "AGENTS.md", "# Workspace Root\n\nRoot graph node.\n");
   writeFile(tempRoot, "ai/curaos/AGENTS.md", "# Repo Contract\n\n[Workspace](../../AGENTS.md)\n");
   writeFile(tempRoot, "ai/curaos/docs/README.md", "# Docs\n\n[Repo Contract](../AGENTS.md)\n");
-  writeFile(tempRoot, "ai/curaos/docs/DOC-GRAPH.md", "# Existing Graph\n\nPreserve me.\n");
+  writeFile(tempRoot, "ai/example/docs/DOC-GRAPH.md", "# Existing Graph\n\nPreserve me.\n");
 
   execFileSync("git", ["init"], { cwd: tempRoot, stdio: "ignore" });
   execFileSync("git", ["config", "user.name", "Codex Test"], { cwd: tempRoot, stdio: "ignore" });
@@ -79,7 +79,7 @@ test("write mode fails closed when a declared submodule is unpopulated", (t) => 
   );
   fs.mkdirSync(path.join(tempRoot, "curaos"), { recursive: true });
 
-  const before = fs.readFileSync(path.join(tempRoot, "ai/curaos/docs/DOC-GRAPH.md"), "utf8");
+  const before = fs.readFileSync(path.join(tempRoot, "ai/example/docs/DOC-GRAPH.md"), "utf8");
   const result = spawnSync("node", ["scripts/check-doc-graph.js", "--write"], {
     cwd: tempRoot,
     encoding: "utf8",
@@ -88,7 +88,7 @@ test("write mode fails closed when a declared submodule is unpopulated", (t) => 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /DOC-GRAPH write blocked: unpopulated submodule/);
   assert.match(result.stderr, /curaos/);
-  assert.equal(fs.readFileSync(path.join(tempRoot, "ai/curaos/docs/DOC-GRAPH.md"), "utf8"), before);
+  assert.equal(fs.readFileSync(path.join(tempRoot, "ai/example/docs/DOC-GRAPH.md"), "utf8"), before);
 });
 
 test("write mode succeeds when the declared submodule tree is populated", (t) => {
@@ -110,9 +110,9 @@ test("write mode succeeds when the declared submodule tree is populated", (t) =>
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /wrote ai\/curaos\/docs\/DOC-GRAPH\.md/);
+  assert.match(result.stdout, /wrote ai\/example\/docs\/DOC-GRAPH\.md/);
 
-  const graph = fs.readFileSync(path.join(tempRoot, "ai/curaos/docs/DOC-GRAPH.md"), "utf8");
+  const graph = fs.readFileSync(path.join(tempRoot, "ai/example/docs/DOC-GRAPH.md"), "utf8");
   assert.match(graph, /Nodes: 4/);
   assert.match(graph, /\| \[curaos\/README\.md\]/);
 });
@@ -135,9 +135,9 @@ test("write mode succeeds when a declared submodule has a .git marker but no REA
   });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /wrote ai\/curaos\/docs\/DOC-GRAPH\.md/);
+  assert.match(result.stdout, /wrote ai\/example\/docs\/DOC-GRAPH\.md/);
 
-  const graph = fs.readFileSync(path.join(tempRoot, "ai/curaos/docs/DOC-GRAPH.md"), "utf8");
+  const graph = fs.readFileSync(path.join(tempRoot, "ai/example/docs/DOC-GRAPH.md"), "utf8");
   assert.match(graph, /Nodes: 3/);
   assert.doesNotMatch(graph, /curaos\/README\.md/);
 });

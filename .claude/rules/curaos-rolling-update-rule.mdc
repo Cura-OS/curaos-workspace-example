@@ -1,0 +1,39 @@
+---
+description: "BINDING - every schema/API/runtime change lands in the existing module via forward migration + feature flag + semver bump; parallel paths like `-v2` / `-next` / `*-new` FORBIDDEN"
+paths:
+  - "curaos/**/migrations/**"
+  - "curaos/backend/**/package.json"
+  - "curaos/frontend/**/package.json"
+  - "curaos/.gitmodules"
+---
+<!-- GENERATED: rule-view (node scripts/generate-rule-index.js --write); source: ai/rules/curaos_rolling_update_rule.md -->
+
+User correction (2026-05-28). Replaces Strangler Fig + parallel-path rollouts with rolling in-place updates. Captured after Strangler Fig pattern landed `identity-service-v2/` + `auth-sdk-v2/` parallel paths in PR-1 / PR-2 / PR-3 - user shut it down.
+
+## The rule
+
+**No `-v2` / `-v3` / `*-next` / `*-new` / `*-replacement` parallel paths.** Every change lands in the existing module via:
+
+1. Forward-only migration that adds new columns/tables/indexes (never drops live tables).
+2. Feature flag (env var or settings row) gating the new code path.
+3. Semantic version bump on any published artifact (npm package, contract, event schema).
+4. Backfill jobs that fill the new shape from the existing shape (idempotent + restartable).
+5. Consumer migration through the published package's range bump (`^1 || ^2` → `^2` per consumer over time).
+6. Drop old columns/code/feature flag in a later forward migration once consumer telemetry confirms zero traffic on the old path.
+
+## What never goes in the codebase
+
+- New submodule with `-v2` / `-v3` / `-next` suffix.
+- New package directory with `-v2` / `-v3` / `-replacement` suffix (e.g. `backend/packages/auth-sdk-v2/`).
+- New service directory with `-v2` / `-v3` / `-new` suffix (e.g. `backend/services/identity-service-v2/`).
+- "Strangler Fig with separate paths" rollout plans in ADRs / RFCs / Issues.
+- Publish-rename mechanisms that translate workspace `name` to a different published `name` at `npm publish` time. The workspace name and the published name MUST match.
+- "Cutover archive" subtasks that schedule deletion of an entire submodule (e.g. `_archive/identity-service-v1/`). Drop the deprecated path with a normal forward migration commit, not a path-move + archive.
+
+## Exceptions
+
+None at workspace level. If a real exception arises (e.g. binary protocol incompatibility that genuinely cannot run in one process), file an ADR + escalate to the user for explicit per-case approval. The exception lands in the ADR, not in this rule.
+
+Signal gates (below) are equally BINDING: every drop/promote step is gated on a measurable signal, never on a clock.
+
+Binding core only. Full rule + rationale: ai/rules/curaos_rolling_update_rule.md (canonical; edit there, then run node scripts/generate-rule-index.js --write).

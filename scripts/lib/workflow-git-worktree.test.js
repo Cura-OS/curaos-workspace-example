@@ -11,10 +11,10 @@ const { isolatedLaneWorktreePath, safeWorktreeSlug } = require("./workflow-git.j
 test("workflow git helper derives isolated lane worktree paths safely", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workflow-git-path-"));
   const slug = safeWorktreeSlug("your-org/curaos#123");
-  assert.equal(slug, "cura-care-oriented-stack-curaos-123");
+  assert.equal(slug, "your-org-curaos-123");
   assert.equal(
-    isolatedLaneWorktreePath({ issue: "your-org/curaos#123", branch: "feat/cura-care-oriented-stack-curaos-123", repoRoot: root }),
-    path.join(root, ".worktrees", "feat-cura-care-oriented-stack-curaos-123"),
+    isolatedLaneWorktreePath({ issue: "your-org/curaos#123", branch: "feat/your-org-curaos-123", repoRoot: root }),
+    path.join(root, ".worktrees", "feat-your-org-curaos-123"),
   );
 });
 

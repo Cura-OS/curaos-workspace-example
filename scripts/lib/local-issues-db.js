@@ -7,6 +7,12 @@ const DEFAULT_DB_RELATIVE = ".scratch/state/symphony-work/local-issues.sqlite";
 const MIGRATION_IDS = ["001_initial_local_issues", "002_local_issue_parent_hierarchy"];
 const MIGRATION_ID = MIGRATION_IDS[0];
 
+// Per-process cache of already-migrated dbPaths. ensureDatabase runs several
+// `sqlite3` subprocess spawns (schema create + migration marks + column probe);
+// re-running them on every createIssue/getIssue turned a 300-row seed into ~1800
+// spawns (18s). The schema is idempotent, so a dbPath needs it only once per process.
+const ensuredDbPaths = new Map();
+
 function defaultDbPath(root = process.cwd()) {
   return path.join(root, DEFAULT_DB_RELATIVE);
 }
@@ -64,6 +70,8 @@ function markMigration(dbPath, id) {
 }
 
 function ensureDatabase({ dbPath = defaultDbPath() } = {}) {
+  const cached = ensuredDbPaths.get(dbPath);
+  if (cached) return cached;
   runSql(dbPath, `
 PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -134,7 +142,9 @@ CREATE TABLE IF NOT EXISTS sync_outbox (
     runSql(dbPath, "ALTER TABLE local_issues ADD COLUMN parent_id TEXT NOT NULL DEFAULT '';");
   }
   markMigration(dbPath, MIGRATION_IDS[1]);
-  return { dbPath, migration: MIGRATION_IDS[MIGRATION_IDS.length - 1], migrations: MIGRATION_IDS };
+  const result = { dbPath, migration: MIGRATION_IDS[MIGRATION_IDS.length - 1], migrations: MIGRATION_IDS };
+  ensuredDbPaths.set(dbPath, result);
+  return result;
 }
 
 function mustIssueId(id) {
@@ -181,7 +191,9 @@ function createIssue({
   if (!title || !String(title).trim()) throw new Error("issue title is required");
   const parent = assertParentIssue({ dbPath, issueId, parentId });
   const stamp = now();
-  runSql(dbPath, `
+  // One spawn: INSERT then SELECT the row back in the same sqlite3 invocation
+  // (INSERT emits no JSON rows, so `-json` returns only the trailing SELECT).
+  const rows = queryRows(dbPath, `
 INSERT INTO local_issues (
   id, parent_id, title, body, status, priority, owner_path, workflow_name, target_phase,
   created_at, updated_at, github_repo, github_issue_number, github_sync_status
@@ -203,8 +215,9 @@ ON CONFLICT(id) DO UPDATE SET
   github_repo = excluded.github_repo,
   github_issue_number = excluded.github_issue_number,
   github_sync_status = excluded.github_sync_status;
+SELECT * FROM local_issues WHERE id = ${sqlString(issueId)} LIMIT 1;
 `);
-  return getIssue({ dbPath, id: issueId });
+  return rows[0] || null;
 }
 
 const ISSUE_UPDATE_COLUMNS = {

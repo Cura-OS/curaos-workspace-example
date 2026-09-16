@@ -1,0 +1,61 @@
+---
+description: "3-tier validation strategy - Zod 4 default; Valibot escape for bundle-sensitive RN apps; ArkType escape for proven hot paths; class-validator BANNED for new code"
+paths:
+  - "curaos/backend/**/*.dto.ts"
+  - "curaos/backend/**/dto/**"
+  - "curaos/backend/packages/*contracts*/**"
+  - "curaos/**/*.schema.ts"
+  - "curaos/frontend/**/forms/**"
+---
+<!-- GENERATED: rule-view (node scripts/generate-rule-index.js --write); source: ai/rules/curaos_validation_rule.md -->
+
+User decision (2026-05-24, after Decision-2 walkthrough of research digest):
+
+## The rule
+
+CuraOS uses a **3-tier validation strategy** for all DTO/contract/runtime validation:
+
+| Tier | Tool | Use for |
+|---|---|---|
+| Default | **Zod 4** | Every new NestJS service DTO; ts-rest contracts; Drizzle column schemas (`drizzle-zod`); OpenAPI gen (`zod-to-openapi` / `nestjs-zod`); frontend web validation (React Hook Form, TanStack Form resolvers); tRPC procedures |
+| Bundle escape | **Valibot** | React Native apps under `frontend/apps/personal-*` AND `frontend/apps/clinician-app|patient-app` ONLY IF a bundle-size audit proves Zod hurts perceived TTI; otherwise stay Zod for one-source-of-truth |
+| Hot-path escape | **ArkType** | A service hitting >1M validations/min AND profiling proves Zod 4 is the bottleneck; not speculative use |
+| **BANNED for new code** | **class-validator** + class-transformer | Unmaintained 2+ years; no Zod-style inference; explicit override of NestJS docs default |
+
+**Existing services on class-validator**: no forced migration. Migrate when service is touched naturally OR when refactor is otherwise on the table.
+
+## NestJS docs override
+
+[curaos_nestjs_docs_first_rule.md](curaos_nestjs_docs_first_rule.md) says agents consult docs.nestjs.com FIRST. Those docs still list class-validator as the default ValidationPipe. **This rule overrides:** for new services, ignore the docs.nestjs.com class-validator example; use Zod 4 via `nestjs-zod`.
+
+## Mandatory bridge libraries
+
+| Concern | Lib |
+|---|---|
+| NestJS ValidationPipe → Zod schema | `nestjs-zod` |
+| @nestjs/swagger OAS gen from Zod | `nestjs-zod` (until upstream `@nestjs/swagger` ships native Zod per issue nestjs/nest#15988) |
+| Drizzle column → Zod schema | `drizzle-zod` |
+| ts-rest contract → Zod (direct, native) | `@ts-rest/core` |
+| React Native form resolver | `@hookform/resolvers/zod` |
+| TanStack Form resolver | `@tanstack/zod-form-adapter` |
+| Valibot drop-in (when used) | `@hookform/resolvers/valibot`, `drizzle-valibot`, `valibot-to-openapi` |
+
+## Per-package declaration
+
+Every service `AGENTS.md` frontmatter declares its validator:
+
+```yaml
+validation: zod | valibot | arktype
+```
+
+If absent, agents assume Zod 4. Use `valibot` or `arktype` ONLY w/ a recorded justification in the same service's `Requirements.md`.
+
+## How to apply
+
+- New service scaffolds (Codegen Engine per ADR-0123): default template uses Zod 4
+- Codegen recipes: ship Zod 4 schemas inferred from TypeSpec model or Drizzle column types
+- Existing class-validator services: no forced migration; migrate on next non-trivial refactor
+- Shared `@curaos/*` packages exporting validation schemas: Zod 4 (so frontend + backend reuse without bundle penalty until Valibot proven necessary)
+- AI-agent test scaffolds: assertion factories generate from Zod schemas via `zod-fixture` or `fishery`+`zod` adapters
+
+Binding core only. Full rule + rationale: ai/rules/curaos_validation_rule.md (canonical; edit there, then run node scripts/generate-rule-index.js --write).
