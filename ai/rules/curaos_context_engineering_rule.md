@@ -23,7 +23,7 @@ User decision (2026-05-25, DA4 walkthrough - grounded in [[curaos-cli-agents-rul
 
 ## Banned
 
-- Eager full-context load (use JIT + RAG via codegraph)
+- Eager full-context load (use JIT + RAG via zvec-grep)
 - Raw tool output passed up agent chain (use summary-only return)
 - Naive agentic loops without sliding window (O(N²) cost trap)
 - Single model for all tasks (use layered tiering per [[curaos-cli-agents-rule]])
@@ -154,7 +154,7 @@ Equivalent for non-Claude agents: `.agentignore` or explicit `fd`/`rg` queries s
 
 Instead of loading entire repos at start:
 1. Agent maintains lightweight references (file paths, query IDs, links)
-2. Dynamically loads via tool calls when needed (via codegraph_search, Read, Bash:rg)
+2. Dynamically loads via tool calls when needed (via zvec-grep, LSP, ast-grep, Read, Bash:rg)
 3. Discards loaded content after use (tool result clearing from deep history)
 
 **Result:** 95% context reduction for long-running agents vs eager loading (Morph 2026 analysis).
@@ -246,7 +246,7 @@ LLM attention strongest at beginning + end of context. Information buried at 50%
 
 **Mitigations:**
 1. Place most critical instructions at START AND END of system prompt
-2. Use RAG (or codegraph_search) to surface specific chunks rather than loading entire codebase
+2. Use RAG (or zvec-grep) to surface specific chunks rather than loading entire codebase
 3. Reranking pass before injection (if RAG used)
 
 **Pattern in CuraOS system prompts:**
@@ -259,7 +259,7 @@ CRITICAL: NEVER push to main without PR review.
 ...
 [END]
 REMINDER: Confirm `bun run ci` exit 0 + show output before marking done.
-REMINDER: Use codegraph_search before rg for structural queries.
+REMINDER: Use zvec-grep, the language server and ast-grep before plain rg for structural queries.
 ```
 
 ## RAG vs context-loading decision matrix
@@ -269,7 +269,7 @@ REMINDER: Use codegraph_search before rg for structural queries.
 | Document corpus > 1M tokens | Yes | No (cost-prohibitive) |
 | Cross-lingual / paraphrase-heavy queries | Yes | No |
 | Single document < 50K tokens | No | Yes (simpler, more accurate) |
-| Codebase navigation (agents) | JIT tool-based (codegraph) | NO eager load |
+| Codebase navigation (agents) | JIT tool-based (LSP + ast-grep + zvec-grep) | NO eager load |
 | Structured facts retrieval | RAG / Mem0 hybrid | No |
 | Complete in-context reasoning required | No | Yes |
 | Enterprise (50K-100K pre-reasoning) | RAG + MCP for metadata | Long-context for reasoning phase |
@@ -305,7 +305,7 @@ Tradeoff: RAG misses cross-document reasoning
 
 ### Hurts
 
-- Tasks where answer is locatable via search (use RAG / codegraph)
+- Tasks where answer is locatable via search (use RAG / zvec-grep)
 - Many independent sub-tasks (use parallel sub-agents w/ isolated contexts per DA1 swarm pattern)
 - Creative tasks where noise degrades quality
 - Cost-sensitive pipelines where input volume dominates
@@ -332,7 +332,7 @@ Per DA1 layered tiering:
 | AGENTS.md §6 NFR (performance) | BATS budget tracker + JIT loading + sub-agent isolation = predictable per-session cost |
 | AGENTS.md §10 (agent operating rules) | Verification stack (per [[curaos-verification-stack-rule]] when locked) depends on sub-agent isolation defined here |
 | [[curaos-cli-agents-rule]] | Model tiering matrix references this rule for routing logic |
-| [[curaos-mcp-stack-rule]] | context-mode MCP implements persisted-output pattern; codegraph for JIT structural queries |
+| [[curaos-mcp-stack-rule]] | context-mode MCP implements persisted-output pattern; language server + ast-grep for JIT structural queries |
 | [[curaos-agents-md-schema-rule]] | AGENTS.md <150 lines fits one cache window prefix; full module context loads in one round-trip |
 | [[curaos-repo-conventions-rule]] | TSDoc on shared exports lets agents read parameter shapes via JIT without reading impl |
 | [[curaos-memory-agents-sync-rule]] | This rule mirrors byte-identical |
@@ -346,7 +346,7 @@ Why context engineering wins for AI agents specifically:
 - **Sliding 2-step window** = O(N²) → O(N) tool call cost
 - **Sub-agent summary-only return** = parent context stays under control even w/ 200+ agent swarm
 - **Persisted output via context-mode MCP** = huge tool results never crash main context
-- **JIT via codegraph** = structural queries cost <0.1% of full file reads
+- **JIT via language server + ast-grep + zvec-grep** = structural queries instead of full file reads
 - **/compact proactively at 60%** = prevents cascade failure; CLAUDE.md re-injects
 - **Lost-in-the-middle defense** = critical instructions actually honored vs buried + ignored
 - **TTL explicit by frequency** = avoids silent 30-60% cost regression from 2026-03-06 Anthropic change

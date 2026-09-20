@@ -259,7 +259,7 @@ gh search issues --owner your-org \
 - `[[curaos-agents-md-schema-rule]]` - per-module AGENTS.md frontmatter + split pattern
 - `[[curaos-doc-graph-rule]]` - every Markdown is a graph node; `DOC-GRAPH.md` enforcement
 - `[[curaos-reuse-dry-rule]]` - one canonical owner per behavior/decision/rule
-- `[[curaos-knowledge-persistence-rule]]` - L1 HANDOVER + L2 module docs + L3 ADRs + L4 codegraph + L5 git + L6 cold storage
+- `[[curaos-knowledge-persistence-rule]]` - L1 HANDOVER + L2 module docs + L3 ADRs + L4 LSP + ast-grep + zvec-grep + L5 git + L6 cold storage
 - `[[curaos-memory-agents-sync-rule]]` - memory ↔ `ai/rules/` sync mandate
 - `[[curaos-version-pinning-rule]]` - pin SHA on GH Actions; pin Renovate cadence
 

@@ -239,7 +239,7 @@ Closes #
 - [ ] `bun run ci` passes locally (or CI link)
 - [ ] No tests removed, skipped, or renamed
 - [ ] No CI step weakened (`|| true`, conditional gates, coverage threshold change)
-- [ ] No new utility duplicates existing code (verified with `rg` or `codegraph_search`)
+- [ ] No new utility duplicates existing code (verified with zvec-grep, the language server and ast-grep)
 
 ## Security
 - [ ] No PHI in logs, commits, or error messages
@@ -250,7 +250,7 @@ Closes #
 ## Scope check
 - [ ] Touches fewer than 5 unrelated files (if not, split the PR)
 - [ ] Single purpose - one sentence describes the entire change
-- [ ] codegraph_impact attached (for changes touching shared interfaces)
+- [ ] Impact proof attached: LSP references and call hierarchy inside one project graph, plus ast-grep and zvec-grep managed `rg` across repositories (for changes touching shared interfaces)
 ```
 
 ### Issue templates + labels
@@ -429,7 +429,7 @@ Rule applies BOTH `curaos/` (code) AND `ai/curaos/` (agent docs). Per [[curaos-a
 
 Why these conventions win for AI agents specifically:
 - **kebab-case + NestJS suffixes** → reliable grep + auto-location across all CLI agents (Claude Code, Codex, Gemini, OpenCode, Cursor, Aider)
-- **`*.spec.ts` co-location** → agents find tests next to source w/o path lookup or codegraph round-trip
+- **`*.spec.ts` co-location** → agents find tests next to source w/o path lookup or a search round-trip
 - **`package.json#exports`** → Bun/Vite bundlers + agents reading import statements both work natively
 - **TSDoc on public exports** → agents read parameter shapes w/o reading impl (saves context tokens)
 - **ADR refs by number** → stable across renames; `git log -S "ADR-0045"` finds all related changes

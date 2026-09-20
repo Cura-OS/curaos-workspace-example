@@ -6,7 +6,7 @@
 // lane: the owned root's mirror docs (CONTEXT.md + Requirements.md + AGENTS.md under ai/curaos/,
 // per curaos_ai_mirror_rule), the ADR index, contract sources, the lane's plan row, and the
 // PRE-CODING ANCHORS (naming / contract / no-dash invariants) the worker must confirm before
-// writing files. Structural code questions stay with CodeGraph at execution time (codegraph_context
+// writing files. Structural code questions stay with the language server and ast-grep at execution time (LSP references
 // first); this bundle carries the document context, not a code dump.
 //
 // Fail-soft per lane: a bundle write failure never aborts planning (mirrors the wave-plan write
@@ -53,7 +53,7 @@ const PRE_CODING_ANCHORS = [
   "2. Contract invariants: APIs/events/data are VERSIONED; never break a published contract - forward migration + semver bump per curaos_rolling_update_rule (no `-v2`/`-next` parallel paths).",
   "3. Zero em/en dashes in EVERY produced file, commit, issue, or PR (curaos_no_em_dash_rule); use hyphen, comma, semicolon, colon, or parentheses.",
   "4. Keep implementation inside the issue's owned paths. Use approved closeout paths only for gate-required artifacts such as DOC-GRAPH.md, mirror docs, lockfiles, generated SDK artifacts named by acceptance, or parent submodule pointers.",
-  "5. Structural code questions: consult CodeGraph (codegraph_context) BEFORE text search; this bundle resolves the document context once so the worker does not re-enumerate it.",
+  "5. Structural code questions: consult the language server and ast-grep, combined with zvec-grep, BEFORE plain text search; this bundle resolves the document context once so the worker does not re-enumerate it.",
 ];
 
 // buildLaneBundle: pure renderer (fs injected via opts.readFile) -> markdown string.

@@ -201,41 +201,6 @@ if [ "$RC" -eq 3 ]; then ok "T9b missing gitleaks fails closed in apply (3)"; el
 OUT="$(GC_GITLEAKS_BIN="$TMP/no-such-gitleaks" GC_OPEN_ISSUES_FILE="$EMPTY_ISSUES" bash "$SCRIPT" --root "$R9" 2>&1)"; RC=$?
 if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q "WARN: gitleaks not found"; then ok "T9b missing gitleaks only warns in dry-run"; else nok "T9b missing-dry" "rc=$RC out=$OUT"; fi
 
-# --- T10: .codegraph WAL checkpoint with size evidence (apply, fixture db) ---
-if command -v sqlite3 >/dev/null 2>&1; then
-  R10="$TMP/r10"
-  mkroot "$R10"
-  mkdir -p "$R10/.codegraph"
-  DB="$R10/.codegraph/codegraph.db"
-  # SIGKILL skips the clean close so the WAL survives on disk (a clean close
-  # would checkpoint + remove it). bun -e argv = [bun, args...]; db path is argv[1].
-  # The intermediate bash is bun's job parent, so the expected "Killed: 9" notice
-  # lands on its (redirected) stderr instead of the test output.
-  bash -c 'bun -e "
-const { Database } = require(\"bun:sqlite\");
-const db = new Database(process.argv[1]);
-db.exec(\"PRAGMA journal_mode=WAL;\");
-db.exec(\"CREATE TABLE t (x BLOB);\");
-db.exec(\"INSERT INTO t VALUES (randomblob(200000));\");
-process.kill(process.pid, \"SIGKILL\");
-" "$1"; :' _ "$DB" >/dev/null 2>&1
-  WAL_BEFORE="$(wc -c < "${DB}-wal" 2>/dev/null | tr -d '[:space:]')"
-  if [ "${WAL_BEFORE:-0}" -gt 0 ] 2>/dev/null; then
-    run_gc "$R10"
-    if printf '%s\n' "$OUT" | grep -q "would checkpoint"; then ok "T10 dry-run reports sizes, would checkpoint"; else nok "T10 dry-run" "$OUT"; fi
-    WAL_MID="$(wc -c < "${DB}-wal" | tr -d '[:space:]')"
-    if [ "$WAL_MID" = "$WAL_BEFORE" ]; then ok "T10 dry-run left WAL untouched"; else nok "T10 dry-run wal" "before=$WAL_BEFORE mid=$WAL_MID"; fi
-    run_gc "$R10" --apply
-    WAL_AFTER="$(wc -c < "${DB}-wal" 2>/dev/null | tr -d '[:space:]')"
-    if [ "$RC" -eq 0 ] && [ "${WAL_AFTER:-0}" -eq 0 ]; then ok "T10 apply truncated WAL ($WAL_BEFORE -> ${WAL_AFTER:-0} bytes)"; else nok "T10 apply" "rc=$RC before=$WAL_BEFORE after=${WAL_AFTER:-?} out=$OUT"; fi
-    if printf '%s\n' "$OUT" | grep -q "checkpointed .*before=${WAL_BEFORE} after="; then ok "T10 size evidence printed"; else nok "T10 evidence" "$OUT"; fi
-  else
-    nok "T10 fixture" "could not produce a persistent WAL (before=${WAL_BEFORE:-empty})"
-  fi
-else
-  ok "T10 skipped: sqlite3 not installed"
-fi
-
 # --- T11: bad --root fails closed (marker validation) ---
 OUT="$(GC_GITLEAKS_BIN="$STUB_OK" GC_OPEN_ISSUES_FILE="$EMPTY_ISSUES" bash "$SCRIPT" --root "$TMP/missing-root" 2>&1)"; RC=$?
 if [ "$RC" -eq 5 ]; then ok "T11 nonexistent --root exits 5"; else nok "T11 missing root" "rc=$RC out=$OUT"; fi

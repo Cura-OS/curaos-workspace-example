@@ -3,7 +3,6 @@ node_modules/
 
 # Build / cache
 .cache/
-.codegraph/
 .serena/
 *.tsbuildinfo
 

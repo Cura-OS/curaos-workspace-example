@@ -96,7 +96,7 @@ User decision (2026-05-25, DA1 walkthrough - grounded in [[curaos-agents-md-sche
 - **Headless:** `gemini -p "<prompt>" --no-interactive` w/ JSON output
 - **Config:** USER-GLOBAL ONLY (`~/.gemini/settings.json` w/ `context.fileName: AGENTS.md`); no per-repo config committed (see note below)
 
-### 5. Aider = polyglot escape (when codegraph + Claude insufficient)
+### 5. Aider = polyglot escape (when language server + Claude insufficient)
 
 - **Why kept:** Semantic PageRank repo-map (best for polyglot); architect mode (`gpt-5.5` high planner + Haiku 4.5 editor; the 88% polyglot bench was GPT-5-high era)
 - **Roles:** Polyglot navigation when CuraOS adds non-TS services (Go, Rust)

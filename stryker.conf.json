@@ -21,7 +21,6 @@
     "/.scratch",
     "/.worktrees",
     "/.claude",
-    "/.codegraph",
     "/.agent-workflow-kit",
     "/.github",
     "/.cursor",

@@ -1,7 +1,7 @@
 ---
 name: curaos-knowledge-persistence-rule
 title: Knowledge persistence (6-layer L1-L6)
-description: Knowledge persistence - 6-layer architecture (L1 Session CLAUDE.md+MEMORY.md auto / L2 Module AGENTS.md+CONTEXT.md+Requirements.md / L3 Decision DECISION-LOG.md+MADR 4.0 ADRs+RFCs / L4 Structural codegraph MCP / L5 Temporal git log + Conventional Commits / L6 Cold postmortems + research/); MADR 4.0.0 YAML frontmatter ADRs queryable via yq; HANDOVER.md overwrite-per-session (git history IS the log); per-module CONTEXT.md <500 lines codified context tier (hot/warm/cold per arXiv:2602.20478); codegraph MCP only for structural queries (NO memory MCPs per [[curaos-mcp-stack-rule]] DA3 ban); GLOSSARY.md for domain terms; runbooks per service; postmortem learnings → CONTEXT.md per-module
+description: Knowledge persistence - 6-layer architecture (L1 Session CLAUDE.md+MEMORY.md auto / L2 Module AGENTS.md+CONTEXT.md+Requirements.md / L3 Decision DECISION-LOG.md+MADR 4.0 ADRs+RFCs / L4 Structural LSP + ast-grep + zvec-grep / L5 Temporal git log + Conventional Commits / L6 Cold postmortems + research/); MADR 4.0.0 YAML frontmatter ADRs queryable via yq; HANDOVER.md overwrite-per-session (git history IS the log); per-module CONTEXT.md <500 lines codified context tier (hot/warm/cold per arXiv:2602.20478); language server + ast-grep + zvec-grep for structural queries (NO memory MCPs per [[curaos-mcp-stack-rule]] DA3 ban); GLOSSARY.md for domain terms; runbooks per service; postmortem learnings → CONTEXT.md per-module
 metadata:
   node_type: memory
   type: feedback
@@ -18,7 +18,7 @@ User decision 2026-05-25, DA10 walkthrough grounded in [[curaos-agents-md-schema
 2. **MADR 4.0.0 ADR format** w/ YAML frontmatter (queryable via `yq`)
 3. **HANDOVER.md overwrite-per-session** - point-in-time snapshot; git history IS the log
 4. **Per-module CONTEXT.md <500 lines** - codified context tier hot/warm/cold per arXiv:2602.20478
-5. **codegraph MCP only** for structural queries (NO memory MCPs per DA3)
+5. **Language server + ast-grep + zvec-grep** for structural queries (NO memory MCPs per DA3)
 6. **GLOSSARY.md + runbooks + postmortem → CONTEXT.md** discipline
 
 ## Live-state precedence (amendment 2026-06-10, remediation RP-24)
@@ -33,7 +33,7 @@ Incident basis: session-28 acted on stale auto-memory for milestone state, and w
 
 ## Banned
 
-- Memory MCPs (Anthropic KG, Mem0, Letta, Zep, Cipher) - per [[curaos-mcp-stack-rule]] DA3 (file-based + codegraph sufficient)
+- Memory MCPs (Anthropic KG, Mem0, Letta, Zep, Cipher) - per [[curaos-mcp-stack-rule]] DA3 (file-based + the structural search ladder sufficient)
 - HANDOVER.md append-only (use overwrite-per-session; git history IS the log)
 - CONTEXT.md >500 lines (silent truncation; effective context window burn)
 - Auto-generated CONTEXT.md (LLM-emitted content gives negative returns per [[curaos-agents-md-schema-rule]] empirical -4%)
@@ -56,7 +56,7 @@ Incident basis: session-28 acted on stale auto-memory for milestone state, and w
 | MADR 4.0.0 | YAML frontmatter enables `yq` queries across decision store ("all accepted ADRs about databases"); consistent section naming; cross-referencing support |
 | HANDOVER.md overwrite-per-session | Point-in-time snapshot - git history IS the log; appending grows stale (stale info accumulates); current state always one file read |
 | CONTEXT.md <500 lines | Agents read in full; >500 lines = silent truncation OR full context window burn; tier-3 codified context architecture (arXiv:2602.20478) keeps hot tier focused |
-| codegraph MCP only | 57% fewer tokens + 71% fewer tool calls + 46% faster vs traditional agent file-reading (CodeGraph benchmarks); generic memory MCPs banned per [[curaos-mcp-stack-rule]] EXCEPT the self-hosted mem0 backend adopted 2026-06-21 per [[curaos-mem0-memory-backend-rule]] (mirror only; ai/rules/ + file-memories stay canonical; no PHI in mem0) |
+| LSP + ast-grep + zvec-grep | Structural answers without file-reading loops; generic memory MCPs banned per [[curaos-mcp-stack-rule]] EXCEPT the self-hosted mem0 backend adopted 2026-06-21 per [[curaos-mem0-memory-backend-rule]] (mirror only; ai/rules/ + file-memories stay canonical; no PHI in mem0) |
 | AGENTS.md adoption 29% runtime reduction | Empirical: AGENTS.md presence reduces median agent runtime 29% + token consumption 17% (per [[curaos-agents-md-schema-rule]]) |
 | Conventional Commits + git pickaxe | `git log -S "<pattern>" --oneline` finds when X introduced w/o reading every ADR; temporal query layer |
 
@@ -237,39 +237,34 @@ date: 2025-06-01
 
 Never delete superseded ADRs - reasoning trail matters.
 
-## Layer 4 - Structural (codegraph MCP only)
+## Layer 4 - Structural (LSP + ast-grep + zvec-grep)
 
-Per [[curaos-mcp-stack-rule]] DA3 must-have MCP: codegraph for structural queries.
+CodeGraph was retired on 2026-09-21 in favour of this search ladder:
+
+1. zvec-grep when installed and available.
+2. The language server and ast-grep ALWAYS, combining results with zvec-grep to catch what it missed.
+3. Normal search tools only when none of the above is available.
+
+Warn when a language server could be prepared but is not, or when ast-grep is missing.
 
 ### Use cases
 
-- "What calls function X?" → `codegraph_callers`
-- "What does Y call?" → `codegraph_callees`
-- "What would break if I changed Z?" → `codegraph_impact`
-- "Where is X defined?" → `codegraph_search`
-- "Show me Y's signature/source/docstring" → `codegraph_node`
-- "Give me focused context for an area" → `codegraph_context`
-- "See several related symbols' source" → `codegraph_explore`
-
-### Benchmarks (vs traditional agent file-reading)
-
-- 35% cheaper cost
-- 57% fewer tokens
-- 71% fewer tool calls
-- 46% faster responses
+- "What calls function X?" / "What does Y call?" → LSP call hierarchy
+- "What would break if I changed Z?" → LSP references and call hierarchy inside one project graph, plus ast-grep and zvec-grep managed `rg` across repositories
+- "Where is X defined?" → LSP definition, zvec-grep
+- "Show me Y's signature/source/docstring" → LSP hover
+- "Find every occurrence of a code shape" → ast-grep (`sg` CLI)
 
 ### Discipline
 
-- Index lag: file watcher debounces ~500ms - no re-query immediately after editing
-- Staleness signal: `codegraph_status` reports "not initialized" → run `codegraph init -i`
-- Rebuild in CI on merge to main
+- An LSP answer stops at one resolved project graph; name the scope of any completeness claim
 - Local-only (no external traffic; PHI-safe)
 
 ### Banned (per [[curaos-mcp-stack-rule]] DA3)
 
 - Anthropic KG Memory MCP, Mem0, Letta, Zep, Cipher - redundant w/ file-based persistence
 - Sourcegraph MCP - enterprise license + cloud dep
-- tree-sitter MCP - codegraph subsumes
+- tree-sitter MCP - ast-grep subsumes
 - ast-grep MCP - use `sg` CLI (per [[curaos-mcp-stack-rule]] CLI-first)
 
 ## Layer 5 - Temporal (git log + Conventional Commits + git pickaxe)
@@ -288,7 +283,7 @@ git log -L :functionName:path/to/file          # history of a specific function
 
 ### Code archaeology workflow
 
-1. `rg <pattern>` → find where appears (or `codegraph_search`)
+1. `rg <pattern>` → find where appears (or zvec-grep)
 2. `git log -S "<pattern>" --oneline` → find when introduced
 3. `git show <hash>` → full context of introduction
 4. `git log --follow -p -- <file>` → full file history including renames
@@ -458,7 +453,7 @@ Agent reads in order:
 | "What did we discuss this session?" | L1 | MEMORY.md auto |
 | "What's this module about?" | L2 | AGENTS.md frontmatter + CONTEXT.md |
 | "Why don't we use Prisma?" | L3 | RESOLUTION-MAP.md → ADR by number (DECISION-LOG.md planned; RESOLUTION-MAP.md serves as index today) |
-| "What calls AuthService.login?" | L4 | codegraph_callers |
+| "What calls AuthService.login?" | L4 | LSP call hierarchy + ast-grep |
 | "When did pgBouncer setting change?" | L5 | git log -S "pgBouncer" --oneline |
 | "Why did the outage happen last June?" | L6 | postmortems/2025-06-*.md |
 | "What did we research for ORM selection?" | L6 | ai/research/<NN-orm>.md |
@@ -470,7 +465,7 @@ Agent reads in order:
 3. **RESOLUTION-MAP.md / DECISION-LOG.md index** - RESOLUTION-MAP.md is the current live index; DECISION-LOG.md is planned (not yet created) as always-current table
 4. **Conventional commits + git log** - free archaeology w/ zero maintenance overhead
 5. **HANDOVER.md on session end** - session-state snapshot overwrite-per-session
-6. **codegraph stays initialized** - 57% token reduction on structural queries
+6. **Language server stays prepared** - warn when a language server could be prepared but is not, or when ast-grep is missing
 7. **MADR ADRs w/ YAML frontmatter** - enable yq queries across decision store
 8. **Postmortem learnings → CONTEXT.md** - prevent repeat failures across sessions
 
@@ -484,7 +479,7 @@ Agent reads in order:
 - Module dependency direction constraints
 
 **Lookup at task time:**
-- API signatures → codegraph or TypeDoc output
+- API signatures → language server hover or TypeDoc output
 - Architectural decisions → RESOLUTION-MAP.md (current live index) → specific ADR (DECISION-LOG.md planned but not yet created)
 - Historical reasoning → git log pickaxe search
 - Postmortem details → ai/curaos/docs/postmortems/
@@ -497,7 +492,7 @@ Agent reads in order:
 | AGENTS.md §13 stack-review workflow | RFC → ADR conversion at close (Layer 3) |
 | [[curaos-agents-md-schema-rule]] | Layer 2 uses extended frontmatter + ASDLC strict body |
 | [[curaos-repo-conventions-rule]] | Layer 5 uses Conventional Commits; ADRs by number per comment policy |
-| [[curaos-mcp-stack-rule]] | Layer 4 codegraph only (memory MCPs banned) |
+| [[curaos-mcp-stack-rule]] | Layer 4 structural search ladder (memory MCPs banned) |
 | [[curaos-context-engineering-rule]] | Layer 1 /compact discipline; CLAUDE.md <200 lines; CONTEXT.md <500 lines |
 | [[curaos-ai-mirror-rule]] | All Layer 2/3/6 files under ai/curaos/ mirror |
 | [[curaos-repo-boundary-rule]] | RFCs/ADRs/postmortems in ai/curaos/docs/ NEVER in submodule repos |
@@ -508,7 +503,7 @@ Agent reads in order:
 - **L1 Session** = volatile but survives /compact via CLAUDE.md re-injection + MEMORY.md auto
 - **L2 Module** = per-module contract; agents know conventions w/o full repo read
 - **L3 Decision** = MADR YAML frontmatter queryable via yq; RESOLUTION-MAP.md current live index; DECISION-LOG.md planned (not yet created)
-- **L4 Structural** = codegraph sub-ms; 57% fewer tokens vs file-reading loops
+- **L4 Structural** = language server + ast-grep + zvec-grep instead of file-reading loops
 - **L5 Temporal** = git pickaxe finds when X introduced w/o reading every ADR
 - **L6 Cold** = postmortems prevent repeat failures; research/ feeds ADRs
 - **HANDOVER.md overwrite-per-session** = one-file session pickup; git history IS the log
@@ -528,7 +523,6 @@ Agent reads in order:
 - MADR ADR template at `ai/curaos/docs/adr/_template.md`; copy + number + populate
 - RFC template at `ai/curaos/docs/rfcs/_template.md` (Made Tech lightweight)
 - Postmortem template at `ai/curaos/docs/postmortems/_template.md` (Google SRE)
-- codegraph re-init on merge to main (CI hook)
 - Conventional Commits enforced via commitlint (per [[curaos-repo-conventions-rule]])
 - Per [[curaos-memory-agents-sync-rule]]: rule changes propagate to memory + ai/rules/ + AGENTS.md §15
 
