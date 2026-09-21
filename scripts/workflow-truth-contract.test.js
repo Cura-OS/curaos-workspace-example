@@ -18,6 +18,7 @@ const {
 const issueSpec = require("./lib/issue-spec.js");
 const verificationGate = require("./lib/workflow-verification-gate.js");
 const workflowGitLib = require("./lib/workflow-git.js");
+const { spawnScratchDir } = require("./lib/workspace-root.js");
 
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -3539,7 +3540,9 @@ process.exit(64);
 `;
 
 async function withWtcGhStub(failTimes, fn) {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wtc-gh-stub-"));
+  // checkout-local scratch, never $TMPDIR: a spawnable stub under /var/folders costs ~350ms per
+  // exec on macOS versus ~15ms here, which pushed this test past bun's 5s default (spawnScratchDir).
+  const tmp = spawnScratchDir(root, "wtc-gh-stub-");
   const bin = path.join(tmp, "bin");
   fs.mkdirSync(bin, { recursive: true });
   fs.writeFileSync(path.join(bin, "gh"), WTC_GH_STUB, { mode: 0o755 });
