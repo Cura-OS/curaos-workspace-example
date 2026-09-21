@@ -30,7 +30,7 @@ if not paths:
 
 for path in paths:
     text = path.read_text(encoding="utf-8", errors="ignore")
-    if "–" in text or "—" in text:
+    if "\u2013" in text or "\u2014" in text:
         bad.append(f"{path.relative_to(ROOT)}: banned dash")
     for match in LINK.finditer(text):
         target = match.group(1).split("#", 1)[0].strip("<>")

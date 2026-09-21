@@ -26,8 +26,18 @@ pins:
 # JS suites (bun runs both bun:test and node:test files). Explicit workspace
 # globs: a bare `bun test scripts/` substring-matches curaos/scripts/ inside
 # the submodule and bleeds out of repo scope.
+#
+# --timeout raises bun's 5000ms per-test DEFAULT for the whole suite. Several
+# cases here drive real subprocesses (sqlite3 per row, PATH stubs per gh call),
+# and the shared CI runner is roughly 1.6x slower than a laptop, so a case that
+# takes 3s locally crosses 5s there. Three separate CI runs each red-flagged a
+# different such case; raising the floor once beats chasing them one run at a
+# time. 30s is still a real bound, not a blanket excuse: a genuinely hung test
+# still fails, and a case that legitimately needs longer declares its own budget
+# (bun:test takes a positional number, node:test takes `{ timeout }`; a
+# positional number on a node:test case is SILENTLY IGNORED).
 test-js:
-    bun test scripts/*.test.js scripts/lib/*.test.js
+    bun test --timeout 30000 scripts/*.test.js scripts/lib/*.test.js
 
 # AGENTS.md schema gate alone (RP-14); also runs inside `just docs` via check-docs.sh.
 agents-schema:
