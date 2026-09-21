@@ -3,7 +3,7 @@
 // Runner: bun test. The gh binary is stubbed with a recording fake on PATH; the stderr-passthrough
 // regression runs the gh-subissue-wire workflow in a SUBPROCESS so the calling process's stderr is
 // observable (in-process the parent stderr is the test runner's own and cannot be asserted).
-const { test, expect, beforeEach, afterEach } = require("bun:test");
+const { test, expect, beforeEach, afterEach, setDefaultTimeout } = require("bun:test");
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -11,6 +11,16 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const ghProject = require("./gh-project.js");
+
+// This file's OWN per-test budget, and it deliberately OVERRIDES the suite-wide
+// `--timeout 30000` the justfile passes (setDefaultTimeout wins over the flag, per file).
+// Every case here spawns the PATH stub a handful of times and nothing else, so the whole
+// file is sub-second once the stub runs under a runtime with a cheap file-run path. The
+// suite-wide floor exists for the sqlite cases in other files; borrowing it here would let
+// a stub that costs seconds per call sit silently under a 30s ceiling again, which is
+// exactly how this file reached ~11s for one case. 5000ms is bun's own default and ~40x
+// the 114ms this file's slowest case measures on the CI runner.
+setDefaultTimeout(5000);
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const WORKFLOW_PATH = path.join(ROOT, "scripts", "workflows", "gh-subissue-wire.workflow.js");
@@ -25,7 +35,7 @@ let driverPath;
 //  - "graphql": schema probe advertises Issue.parent/subIssues -> batched hierarchy read path.
 //  - "rest-fallback": probe omits them -> classified per-child REST pair; the parent probe fails
 //    with GitHub's EXACT payload: JSON body on stdout, "gh: ... (HTTP 404)" on stderr, exit 1.
-const GH_STUB = `#!/usr/bin/env bun
+const GH_STUB = `#!/usr/bin/env node
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 if (process.env.GH_STUB_LEDGER) fs.appendFileSync(process.env.GH_STUB_LEDGER, JSON.stringify(args) + "\\n");
@@ -709,7 +719,7 @@ test("batchIssueRead chunks above ISSUE_BATCH_CHUNK aliases per document", () =>
 
 test("ensureProject memoizes per process; {refresh:true} re-lists", () => {
   const saved = { PATH: process.env.PATH, GH_STUB_LEDGER: process.env.GH_STUB_LEDGER };
-  const projListStub = `#!/usr/bin/env bun
+  const projListStub = `#!/usr/bin/env node
 const fs = require("node:fs");
 if (process.env.GH_STUB_LEDGER) fs.appendFileSync(process.env.GH_STUB_LEDGER, JSON.stringify(process.argv.slice(2)) + "\\n");
 process.stdout.write(JSON.stringify({ projects: [{ title: "CuraOS Roadmap", number: 2 }] }));

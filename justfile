@@ -17,11 +17,14 @@ docs:
 mirror:
     bash scripts/check-ai-mirror.sh
 
-# Submodule pointer integrity (RP-30): every gitlink in the index must be an
-# ancestor of its submodule's origin default branch. Reaches pre-push via
+# Pin integrity. Submodule pointers (RP-30): every gitlink in the index must be
+# an ancestor of its submodule's origin default branch. Toolchain: every
+# oven-sh/setup-bun step must name an exact bun-version, or a hosted run silently
+# executes the suite on a runtime the local gate never saw. Reaches pre-push via
 # .githooks/pre-push -> just ci (the workspace pre-push gate per RP-01).
 pins:
     bash scripts/check-submodule-pins.sh
+    bash scripts/check-actions-bun-pin.sh
 
 # JS suites (bun runs both bun:test and node:test files). Explicit workspace
 # globs: a bare `bun test scripts/` substring-matches curaos/scripts/ inside
@@ -29,13 +32,17 @@ pins:
 #
 # --timeout raises bun's 5000ms per-test DEFAULT for the whole suite. Several
 # cases here drive real subprocesses (sqlite3 per row, PATH stubs per gh call),
-# and the shared CI runner is roughly 1.6x slower than a laptop, so a case that
-# takes 3s locally crosses 5s there. Three separate CI runs each red-flagged a
-# different such case; raising the floor once beats chasing them one run at a
-# time. 30s is still a real bound, not a blanket excuse: a genuinely hung test
-# still fails, and a case that legitimately needs longer declares its own budget
-# (bun:test takes a positional number, node:test takes `{ timeout }`; a
-# positional number on a node:test case is SILENTLY IGNORED).
+# and a subprocess cost that is invisible on one host can dominate on another.
+# The runner is NOT uniformly slower than a laptop: measured, it ran the slowest
+# gh-project case in 114ms against 11s here, so "the runner is slower" is the
+# wrong model and was removed from this comment. What actually varies is which
+# subprocess is cheap where. 30s is a real bound, not a blanket excuse: a
+# genuinely hung test still fails. A file that must stay fast declares its own
+# TIGHTER budget and that wins over this flag: scripts/lib/gh-project.test.js
+# calls setDefaultTimeout(5000) so a slow stub can never hide under this floor
+# again. A single case needing longer declares its own budget too (bun:test
+# takes a positional number, node:test takes `{ timeout }`; a positional number
+# on a node:test case is SILENTLY IGNORED).
 test-js:
     bun test --timeout 30000 scripts/*.test.js scripts/lib/*.test.js
 
