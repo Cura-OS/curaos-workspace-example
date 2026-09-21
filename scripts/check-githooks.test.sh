@@ -27,7 +27,7 @@ mkstub() {
   mkdir -p "$bin"
   printf '#!/bin/sh\necho "python3 $*" >> "%s"\nexit ${PYTHON_EXIT:-0}\n' "$LEDGER" > "$bin/python3"
   printf '#!/bin/sh\necho "gitleaks $*" >> "%s"\nexit ${GITLEAKS_EXIT:-0}\n' "$LEDGER" > "$bin/gitleaks"
-  printf '#!/bin/sh\necho "just $*" >> "%s"\nexit ${JUST_EXIT:-0}\n' "$LEDGER" > "$bin/just"
+  printf '#!/bin/sh\necho "just $*" >> "%s"\necho "GIT_DIR=[${GIT_DIR:-}]" >> "%s"\nexit ${JUST_EXIT:-0}\n' "$LEDGER" "$LEDGER" > "$bin/just"
   chmod +x "$bin/python3" "$bin/gitleaks" "$bin/just"
 }
 
@@ -80,6 +80,16 @@ if [ "$status" != "0" ] && ! grep -q '^just ci$' "$LEDGER"; then
   ok "a failing secret scan blocks the push before the gate runs"
 else
   nok "secret-scan leg blocking" "exit=$status ledger=$(tr '\n' '|' < "$LEDGER")"
+fi
+
+# 3c) Git exports GIT_DIR into hook environments; inherited by the gate it breaks every fixture
+#     repo the suites build. The gate must see the same environment as a plain terminal run.
+: > "$LEDGER"
+status="$(run_hook "$BIN" env GIT_DIR=/bogus/git/dir GIT_WORK_TREE=/bogus/worktree)"
+if [ "$status" = "0" ] && grep -q '^GIT_DIR=\[\]$' "$LEDGER"; then
+  ok "the inherited GIT_DIR is cleared before the gate runs"
+else
+  nok "GIT_DIR cleared" "exit=$status ledger=$(tr '\n' '|' < "$LEDGER")"
 fi
 
 # 4) A missing runner must fail closed, never skip.

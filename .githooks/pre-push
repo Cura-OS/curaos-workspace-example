@@ -7,6 +7,12 @@
 # in the INDEX (scripts/check-githooks.test.sh pins that; it was committed 644 and never ran).
 # Escape hatch: LEFTHOOK=0 skips (lefthook convention), emergencies only.
 [ "$LEFTHOOK" = "0" ] && exit 0
+# Git exports GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE into a hook's environment. Inherited by the
+# gate they override repo discovery inside every throwaway fixture repo the suites create, so a
+# fixture `git add` dies with "unable to set up work tree using invalid config" and the gate fails
+# for a reason that does not exist in a plain terminal run. scripts/check-submodule-pins.sh already
+# unsets them for the same reason; clearing them once here covers every gate the hook invokes.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_QUARANTINE_PATH
 python3 scripts/check-public-docs.py || exit 1
 gitleaks detect --no-banner --redact || exit 1
 if command -v just >/dev/null 2>&1; then
