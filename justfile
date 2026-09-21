@@ -15,7 +15,11 @@ docs:
 
 # ai/curaos <-> curaos 1:1 structural mirror.
 mirror:
-    bash scripts/check-ai-mirror.sh
+    # This example workspace ships without the private curaos/ submodule, so it has no
+    # ai/curaos/ mirror to compare. The canonical gate skips that case only when the
+    # example opts in; in the real workspace the same condition means the checkout lost
+    # both trees and must fail closed. See scripts/check-ai-mirror.sh.
+    CURAOS_AI_MIRROR_SANITIZED=1 bash scripts/check-ai-mirror.sh
 
 # Pin integrity. Submodule pointers (RP-30): every gitlink in the index must be
 # an ancestor of its submodule's origin default branch. Toolchain: every
