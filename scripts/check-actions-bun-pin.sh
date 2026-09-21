@@ -12,6 +12,11 @@
 # Pin source per curaos_version_pinning_rule: exact versions, no range modifiers, no floating
 # tags. "latest" and "canary" are explicitly not pins.
 #
+# The uses: value is matched with or without surrounding quotes. A quoted scalar is ordinary
+# YAML, and the unquoted-only matcher skipped those steps entirely, so a workflow written as
+# uses: "oven-sh/setup-bun@<sha>" with no bun-version at all was reported green: the gate
+# failed OPEN on the exact defect it exists to catch.
+#
 # Usage: check-actions-bun-pin.sh [workflow-dir-or-file]   (default: .github/workflows)
 # Fail closed: an unreadable target exits 1 rather than reporting nothing to check.
 set -uo pipefail
@@ -37,12 +42,13 @@ fi
 BAD=0
 STEPS=0
 for f in "${FILES[@]}"; do
-  out="$(awk -v file="$f" '
+  out="$(awk -v file="$f" -v Q="'" '
     # A step record runs from its "- " list-item line to the next one. Anything the record
     # does not contain is not part of that step, so a bun-version declared on a neighbouring
     # step never counts as a pin for this one.
+    BEGIN { depth = -1 }
     function flush(   i, nl, L, v, found) {
-      if (buf ~ /uses:[ \t]*oven-sh\/setup-bun@/) {
+      if (buf ~ ("uses:[ \t]*[\"" Q "]?oven-sh/setup-bun@")) {
         steps += 1
         found = 0
         nl = split(buf, L, "\n")
@@ -66,7 +72,15 @@ for f in "${FILES[@]}"; do
       }
       buf = ""
     }
-    /^[ \t]*-[ \t]/ { flush() }
+    # A list item nested DEEPER than the one that opened the current record belongs to that
+    # step as one of its own inputs: a with: block scalar legitimately carries lines like
+    # "  - https://example.invalid" under `registries: |`. Splitting there ended the record
+    # before its bun-version line and failed a correctly pinned workflow closed. Only a
+    # sibling or shallower item starts a new step.
+    /^[ \t]*-[ \t]/ {
+      w = match($0, /[^ \t]/) - 1
+      if (depth < 0 || w <= depth) { flush(); depth = w }
+    }
     { buf = buf "\n" $0 }
     END { flush(); printf "STEPS=%d BAD=%d\n", steps, bad }
   ' "$f")" || {

@@ -117,6 +117,60 @@ else
   nok "real workflows pass" "$out"
 fi
 
+# 9) FAIL-OPEN REGRESSION. `uses:` may carry an ordinary quoted scalar. The matcher only
+#    accepted the unquoted spelling, so a quoted step with NO bun-version at all was never
+#    counted and the gate printed "0 setup-bun step(s) pinned" and exit 0: green on the exact
+#    defect it exists to catch. The quoted step must be found and must fail.
+qi=0
+for q in '"' "'"; do
+  qi=$((qi+1))
+  d="$TMP/quoted$qi"
+  mkdir -p "$d"
+  {
+    printf 'name: CI\non:\n  pull_request: {}\n\njobs:\n  ci:\n    runs-on: self-hosted\n    steps:\n'
+    printf '      - uses: %soven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6%s\n' "$q" "$q"
+    printf '      - name: Run the declared workspace gate\n        run: just ci\n'
+  } > "$d/docs.yml"
+  out="$(run "$d")"
+  if printf '%s' "$out" | grep -q 'EXIT=1' && printf '%s' "$out" | grep -q 'declares no bun-version'; then
+    ok "a ${q}-quoted uses: with no bun-version is caught, not skipped"
+  else
+    nok "quoted uses: is caught" "$out"
+  fi
+done
+
+# 10) FAIL-CLOSED REGRESSION. A `with:` block may carry a YAML block scalar whose lines are
+#     list items. Treating every indented "- " as a new step ended the record before the
+#     bun-version line, so a CORRECTLY pinned workflow was rejected by its own gate. Only a
+#     sibling or shallower list item may end a step record.
+fixture "$TMP/blockscalar" '        with:
+          registries: |
+            - https://example.invalid
+          bun-version: 1.3.14'
+out="$(run "$TMP/blockscalar")"
+if printf '%s' "$out" | grep -q 'EXIT=0'; then
+  ok "a block scalar carrying list items does not split the step record"
+else
+  nok "block scalar does not split the record" "$out"
+fi
+
+# 11) The boundary relaxation must not let a NEIGHBOURING step supply the pin: the record
+#     still ends at a sibling list item, so an unpinned step followed by a pinned one fails.
+d="$TMP/neighbour"
+mkdir -p "$d"
+{
+  printf 'name: CI\non:\n  pull_request: {}\n\njobs:\n  ci:\n    runs-on: self-hosted\n    steps:\n'
+  printf '      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6\n'
+  printf '      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd\n'
+  printf '        with:\n          bun-version: 1.3.14\n'
+} > "$d/docs.yml"
+out="$(run "$d")"
+if printf '%s' "$out" | grep -q 'EXIT=1'; then
+  ok "a pin on the NEXT step still does not count for an unpinned setup-bun step"
+else
+  nok "neighbour pin does not leak" "$out"
+fi
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
