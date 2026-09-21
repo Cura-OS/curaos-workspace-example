@@ -4,14 +4,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Only the doc-graph pass needs the private curaos submodule, which a GitHub Actions
+# checkout of this sanitized example does not have. Every other gate below reads only
+# scripts/ and ai/, both present in that checkout, so they keep running: the early
+# `exit 0` that used to stand here turned the whole `just docs` leg into a no-op on CI.
 if [[ "${GITHUB_ACTIONS:-}" == "true" \
   && "${DOC_GRAPH_ALLOW_MISSING_PRIVATE_SUBMODULES:-}" == "1" \
   && ! -f "curaos/README.md" ]]; then
   echo "doc graph skipped: private curaos submodule unavailable in GitHub Actions checkout"
-  exit 0
+else
+  bun scripts/check-doc-graph.js
 fi
-
-bun scripts/check-doc-graph.js
 node scripts/check-workflow-sync.js
 node scripts/check-symphony-conformance.js
 node scripts/check-symphony-source-audit.js
