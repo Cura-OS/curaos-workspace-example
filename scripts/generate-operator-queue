@@ -46,7 +46,7 @@ done
 
 # Agent shells can carry a narrow GITHUB_TOKEN that lacks org scope. Unset it
 # so gh uses GH_TOKEN or the project-scoped keyring login (workspace pattern).
-gh() { env -u GITHUB_TOKEN command gh "$@"; }
+gh() { env -u GITHUB_TOKEN gh "$@"; }
 
 # Exact one-line unblock commands for the known operator-wall classes.
 # write:packages is the session-36 WALL 1; cosign provisioning is operator-only.
