@@ -1,4 +1,16 @@
 #!/bin/sh
+# Fail-closed pre-push gate (RP-01). The justfile names `just ci` as THE merge gate and names
+# THIS hook as the path that reaches it before a push; running only the doc/secret legs here let
+# a red `just ci` reach a pushed branch. An unresolvable runner MUST block the push: exiting 0
+# because a tool is missing is the same silent-skip class.
+# NOTE: git ignores a hook file that is not executable, so .githooks/pre-push must stay mode 755
+# in the INDEX (scripts/check-githooks.test.sh pins that; it was committed 644 and never ran).
+# Escape hatch: LEFTHOOK=0 skips (lefthook convention), emergencies only.
 [ "$LEFTHOOK" = "0" ] && exit 0
 python3 scripts/check-public-docs.py || exit 1
-gitleaks detect --no-banner --redact
+gitleaks detect --no-banner --redact || exit 1
+if command -v just >/dev/null 2>&1; then
+  exec just ci
+fi
+echo "pre-push: no just runner on PATH; cannot run the declared ci gate; failing closed" >&2
+exit 1
