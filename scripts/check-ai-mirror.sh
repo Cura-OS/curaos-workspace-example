@@ -279,6 +279,28 @@ while IFS= read -r sm; do
   DOC_PRUNE+=( -o -path "$REAL/$sm" )
 done <<< "$SUBMODULE_PATHS"
 STRAY_DOCS="$(/usr/bin/find "$REAL" \( "${DOC_PRUNE[@]}" \) -prune -o -type f \( -name AGENTS.md -o -name CONTEXT.md -o -name Requirements.md \) -print 2>/dev/null)"
+# A directory carrying its own .git is a DIFFERENT repository's checkout (a lane's linked worktree,
+# a stray clone): its module docs are legitimate there and were never checked into curaos. Case 11
+# covers only the .claude/.scratch worktree conventions by name, and a worktree parked anywhere else
+# (observed at curaos/backend/services/<service>.<branch>/) blocked every workspace-root commit.
+# The .git marker is the same leaf primitive is_submodule already uses. find cannot express "prune
+# any dir holding .git", so the few hits are filtered after the walk rather than by a second walk of
+# the whole tree.
+in_nested_checkout() {
+  local dir; dir="$(/usr/bin/dirname "$1")"
+  while [ "$dir" != "$REAL" ] && [ "$dir" != "/" ]; do
+    [ -e "$dir/.git" ] && return 0
+    dir="$(/usr/bin/dirname "$dir")"
+  done
+  return 1
+}
+KEPT=""
+while IFS= read -r doc; do
+  [ -z "$doc" ] && continue
+  in_nested_checkout "$doc" && continue
+  KEPT="${KEPT}${doc}"$'\n'
+done <<< "$STRAY_DOCS"
+STRAY_DOCS="${KEPT%$'\n'}"
 if [ -n "$STRAY_DOCS" ]; then
   echo "POLLUTION: stray agent-doc(s) under a code path in code-only repo:"
   echo "$STRAY_DOCS"

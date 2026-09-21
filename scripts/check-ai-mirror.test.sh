@@ -412,6 +412,49 @@ else
   nok "hook git environment must not leak into the submodule's ignore rules" "$out"
 fi
 
+# 25) a lane's linked worktree parked at an arbitrary code path is a DIFFERENT
+#     repository's checkout, not code-repo pollution. Case 11 only covers the
+#     .claude/.scratch worktree conventions, so a worktree parked elsewhere (seen
+#     live at curaos/backend/services/<service>.<branch>/, which blocked every
+#     workspace-root commit) was attributed to curaos. A checkout is recognized by
+#     its own .git marker, the same primitive is_submodule already uses.
+WS25="$TMP/ws25"
+build_base "$WS25"
+# Faithful to production: the worktree is excluded in the code repo's info/exclude, so the
+# ignore-aware mirror comparator already skips it and only the filesystem walk below sees it.
+git init -q "$WS25/curaos"
+printf '/backend/services/svc-a.some-branch/\n' >> "$WS25/curaos/.git/info/exclude"
+mkdir -p "$WS25/curaos/backend/services/svc-a.some-branch/docs"
+printf 'gitdir: /elsewhere/.git/worktrees/lane\n' > "$WS25/curaos/backend/services/svc-a.some-branch/.git"
+: > "$WS25/curaos/backend/services/svc-a.some-branch/CONTEXT.md"
+: > "$WS25/curaos/backend/services/svc-a.some-branch/Requirements.md"
+: > "$WS25/curaos/backend/services/svc-a.some-branch/docs/AGENTS.md"
+out="$(run "$WS25")"
+if printf '%s' "$out" | grep -q 'EXIT=0' \
+  && ! printf '%s' "$out" | grep -q 'POLLUTION:'; then
+  ok "a nested checkout's own agent docs are not code-repo pollution (exit 0)"
+else
+  nok "nested checkout docs false positive" "$out"
+fi
+
+# 26) the guard still catches a real stray beside that nested checkout, so 25 did
+#     not buy its pass by pruning the whole services/ subtree.
+WS26="$TMP/ws26"
+build_base "$WS26"
+mkdir -p "$WS26/curaos/backend/services/svc-a.some-branch"
+printf 'gitdir: /elsewhere/.git/worktrees/lane\n' > "$WS26/curaos/backend/services/svc-a.some-branch/.git"
+: > "$WS26/curaos/backend/services/svc-a.some-branch/CONTEXT.md"
+: > "$WS26/curaos/backend/services/CONTEXT.md"
+out="$(run "$WS26")"
+if printf '%s' "$out" | grep -q 'POLLUTION: stray agent-doc' \
+  && printf '%s' "$out" | grep -q 'backend/services/CONTEXT.md' \
+  && ! printf '%s' "$out" | grep -q 'svc-a.some-branch/CONTEXT.md' \
+  && printf '%s' "$out" | grep -q 'EXIT=1'; then
+  ok "a real stray beside a nested checkout is still caught (exit 1)"
+else
+  nok "stray beside nested checkout" "$out"
+fi
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
