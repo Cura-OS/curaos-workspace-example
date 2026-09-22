@@ -455,6 +455,85 @@ else
   nok "stray beside nested checkout" "$out"
 fi
 
+# V15-PRECOMMIT-GATES-UNRUNNABLE-IN-A-LANE-WORKTREE: a linked worktree never has the
+# curaos submodule materialized, so curaos/ is empty and the gate refused (case 19).
+# The pinned gitlink IS readable there through the shared common gitdir, so the code
+# side is resolved from the PINNED COMMIT instead, the way check-vendored-git-helpers.sh
+# already does, and the gate renders a REAL verdict.
+# Fixture: a workspace repo whose curaos/ is an empty directory plus a 160000 index
+# entry, with the child repository's object store placed at .git/modules/curaos, which
+# is exactly the shape a linked worktree sees.
+build_pinned_ws() {
+  local ws="$1" child="$2" extra="${3:-}" pin
+  mkdir -p "$ws" "$child"
+  /usr/bin/git -C "$ws" init -q
+  mkdir -p "$ws/ai/curaos/backend/services/svc-a/agents" "$ws/ai/curaos/ops/dev"
+  mkdir -p "$ws/ai/curaos/curaos-website/site-notes"
+  /usr/bin/git -C "$child" init -q
+  mkdir -p "$child/backend/services/svc-a/src" "$child/ops/dev"
+  : > "$child/backend/services/svc-a/src/index.ts"
+  : > "$child/ops/dev/compose.yaml"
+  [ -n "$extra" ] && mkdir -p "$child/$extra" && : > "$child/$extra/keep.txt"
+  cat > "$child/.gitmodules" <<'GM'
+[submodule "backend/services/svc-a"]
+	path = backend/services/svc-a
+	url = https://example.invalid/svc-a.git
+[submodule "curaos-website"]
+	path = curaos-website
+	url = https://example.invalid/curaos-website.git
+GM
+  /usr/bin/git -C "$child" add -A
+  # A gitlink in the PINNED tree: a module leaf whose internals are never mirrored.
+  # ls-tree reports it as objecttype commit, and .gitmodules is what makes it a leaf.
+  /usr/bin/git -C "$child" update-index --add \
+    --cacheinfo "160000,0000000000000000000000000000000000000001,curaos-website"
+  /usr/bin/git -C "$child" -c user.email=t@example.invalid -c user.name=t commit -qm fixture
+  pin="$(/usr/bin/git -C "$child" rev-parse HEAD)"
+  mkdir -p "$ws/.git/modules"
+  cp -R "$child/.git" "$ws/.git/modules/curaos"
+  mkdir -p "$ws/curaos"
+  /usr/bin/git -C "$ws" update-index --add --cacheinfo "160000,$pin,curaos"
+}
+
+# 27) empty curaos/ with a resolvable pin: a real PASS verdict, not a refusal.
+WS27="$TMP/ws27"
+build_pinned_ws "$WS27" "$TMP/ws27-child"
+out="$(run "$WS27")"
+if printf '%s' "$out" | grep -q 'EXIT=0' \
+  && printf '%s' "$out" | grep -q 'pinned' \
+  && ! printf '%s' "$out" | grep -q 'DRIFT:' \
+  && ! printf '%s' "$out" | grep -q 'cannot run the mirror gate'; then
+  ok "unmaterialized curaos/ with a resolvable gitlink passes from the pinned tree"
+else
+  nok "pinned gitlink fallback must render a real pass" "$out"
+fi
+
+# 28) and the SAME fallback still reports real drift: the pinned tree carries a
+#     top-level dir with no ai/curaos/ twin. Proves 27 is not a vacuous green.
+WS28="$TMP/ws28"
+build_pinned_ws "$WS28" "$TMP/ws28-child" "tools/codegen"
+out="$(run "$WS28")"
+if printf '%s' "$out" | grep -q 'EXIT=1' \
+  && printf '%s' "$out" | grep -q 'DRIFT: tools exists in curaos/ but not in ai/curaos/'; then
+  ok "pinned gitlink fallback still reports real drift (exit 1)"
+else
+  nok "pinned gitlink fallback must not pass vacuously" "$out"
+fi
+
+# 29) fail-closed: empty curaos/, gitlink pinned at a commit this checkout does not
+#     have. Nothing to read, so the gate must still REFUSE, never pass.
+WS29="$TMP/ws29"
+build_pinned_ws "$WS29" "$TMP/ws29-child"
+rm -rf "$WS29/.git/modules/curaos"
+out="$(run "$WS29")"
+if printf '%s' "$out" | grep -q 'EXIT=2' \
+  && ! printf '%s' "$out" | grep -q 'DRIFT:' \
+  && ! printf '%s' "$out" | grep -q 'OK: '; then
+  ok "an unresolvable pin still refuses (exit 2), never a pass"
+else
+  nok "unresolvable pin must stay fail-closed" "$out"
+fi
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

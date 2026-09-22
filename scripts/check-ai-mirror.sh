@@ -62,6 +62,59 @@ is_empty_dir() {
   # gate refused every workspace push.
   [ -z "$(/usr/bin/find -L "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]
 }
+# V15-PRECOMMIT-GATES-UNRUNNABLE-IN-A-LANE-WORKTREE: a linked worktree never carries a
+# materialized curaos/, so the refusal below made this gate unrunnable in the checkout
+# where most commits are actually made, and every lane committed with --no-verify.
+# The PINNED GITLINK is readable there: a linked worktree shares the primary's common
+# gitdir, which holds modules/curaos. So resolve the code side from the pinned commit
+# instead of the working tree, the same "verdict is a function of the commit, not of
+# ambient checkout state" move check-vendored-git-helpers.sh already makes.
+#
+# Only the structure this gate actually reads is rebuilt into a temp dir: directories,
+# .gitmodules, and the three agent-doc filenames the pollution guard looks for.
+# Anything that cannot be resolved (no index entry, no object store, missing objects)
+# returns nonzero and falls through to the refusal below: never a pass.
+pinned_curaos_skeleton() {
+  local pin gitdir out listing
+  gitdir="$(/usr/bin/git -C "$WS" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)/modules/curaos"
+  pin="$(/usr/bin/git -C "$WS" rev-parse :curaos 2>/dev/null || true)"
+  [ -n "$pin" ] || return 1
+  listing="$(/usr/bin/git --git-dir="$gitdir" ls-tree -r -t --format='%(objecttype) %(path)' "$pin" 2>/dev/null)" || return 1
+  out="$(mktemp -d)" || return 1
+  # Depth cap matches the deepest walk in this file (find -maxdepth 6). A gitlink
+  # (objecttype commit) becomes a plain directory: .gitmodules below makes it a leaf,
+  # the same way it already does for a submodule that is declared but not populated.
+  printf '%s\n' "$listing" \
+    | /usr/bin/awk '$1 == "tree" || $1 == "commit" { sub(/^[a-z]+ /, ""); if (gsub(/\//, "/") < 6) print }' \
+    | /usr/bin/tr '\n' '\0' | (cd "$out" && /usr/bin/xargs -0 -n 64 /bin/mkdir -p) || return 1
+  # The submodule registry decides which directories are module leaves. Written OUTSIDE
+  # the pipeline below because a `return` in a piped while-loop runs in a subshell and
+  # cannot fail the function: an unreadable registry has to refuse here, not silently
+  # leave an empty file and report every submodule as drift.
+  if printf '%s\n' "$listing" | /usr/bin/grep -qx 'blob \.gitmodules'; then
+    /usr/bin/git --git-dir="$gitdir" cat-file blob "$pin:.gitmodules" > "$out/.gitmodules" 2>/dev/null || return 1
+  fi
+  # The only other files this gate reads on the code side: the three agent-doc names the
+  # pollution guard hunts for. Empty placeholders; only their paths are ever inspected.
+  printf '%s\n' "$listing" \
+    | /usr/bin/awk '$1 == "blob" { sub(/^blob /, ""); print }' \
+    | /usr/bin/grep -E '(^|/)(AGENTS\.md|CONTEXT\.md|Requirements\.md)$' \
+    | while IFS= read -r f; do
+        /bin/mkdir -p "$out/$(/usr/bin/dirname "$f")"
+        : > "$out/$f"
+      done
+  printf '%s\n' "$out"
+}
+
+if is_empty_dir "$REAL"; then
+  PINNED_SKELETON="$(pinned_curaos_skeleton || true)"
+  if [ -n "$PINNED_SKELETON" ]; then
+    trap 'rm -rf "$PINNED_SKELETON"' EXIT
+    REAL="$PINNED_SKELETON"
+    echo "check-ai-mirror: curaos/ is not materialized here; code side resolved from the pinned gitlink $(/usr/bin/git -C "$WS" rev-parse :curaos 2>/dev/null)"
+  fi
+fi
+
 for side in "$REAL" "$AI"; do
   if is_empty_dir "$side"; then
     echo "ERROR: $side is empty, so this checkout cannot run the mirror gate."
