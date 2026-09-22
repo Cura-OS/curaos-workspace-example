@@ -188,8 +188,14 @@ note() { printf 'note  %s\n' "$1"; }
 
 hash_of() { cksum "$1" 2>/dev/null | awk '{ print $1 "-" $2 }'; }
 
+# GNU first, BSD second, and the order is the fix. GNU `stat -f` is not "format": it
+# means FILESYSTEM status, so on Linux it SUCCEEDS and prints a multi-line filesystem
+# block, the `||` never falls through, and the caller's integer test dies on
+# "integer expected". BSD stat rejects `-c`, so trying GNU first falls through
+# correctly on macOS. Measured on the Linux CI runner, where 12 session-closeout
+# cases failed on exactly that while all passed on macOS.
 mtime_of() {
-  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
 }
 
 iso_to_epoch() {
