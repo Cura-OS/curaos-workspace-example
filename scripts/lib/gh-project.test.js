@@ -12,15 +12,22 @@ const { pathToFileURL } = require("node:url");
 
 const ghProject = require("./gh-project.js");
 
-// This file's OWN per-test budget, and it deliberately OVERRIDES the suite-wide
-// `--timeout 30000` the justfile passes (setDefaultTimeout wins over the flag, per file).
-// Every case here spawns the PATH stub a handful of times and nothing else, so the whole
-// file is sub-second once the stub runs under a runtime with a cheap file-run path. The
-// suite-wide floor exists for the sqlite cases in other files; borrowing it here would let
-// a stub that costs seconds per call sit silently under a 30s ceiling again, which is
-// exactly how this file reached ~11s for one case. 5000ms is bun's own default and ~40x
-// the 114ms this file's slowest case measures on the CI runner.
-setDefaultTimeout(5000);
+// Matches the suite-wide `--timeout 30000` the justfile passes, and is stated explicitly so a
+// bare `bun test` of this file does not silently fall back to bun's 5000ms default.
+//
+// This file used to pin its own 5000ms budget to catch a stub that costs seconds per call. That
+// guard does not work, because every case here is SPAWN-bound, not work-bound: each one forks a
+// node driver that forks the PATH stub several times. Wall-clock per-test time therefore tracks
+// host load, not stub cost, and cannot tell the two apart. Measured 2026-09-22 on this checkout:
+// the three heaviest cases run in under 1s wall EACH in isolation (bun startup included), the
+// whole 36-case file runs 5.33s at load average 39.6, and the same unmodified file reported
+// 6716ms / 5008ms / 8126ms for those same three cases minutes earlier at a higher load, failing
+// as timeouts with a NULL child status that reads like a logic fault.
+//
+// The real cost guard is load-independent and already here: the ledger assertions count the gh
+// calls each path makes (see the aliased-hierarchy case asserting ZERO REST db-id reads). A stub
+// that got slower per call shows up there as call-count growth on any machine, at any load.
+setDefaultTimeout(30000);
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const WORKFLOW_PATH = path.join(ROOT, "scripts", "workflows", "gh-subissue-wire.workflow.js");
