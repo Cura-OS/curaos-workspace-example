@@ -6,12 +6,22 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 default: ci
 
 # Full local CI gate: every suite must pass.
-ci: docs mirror pins test-js test-sh
+ci: docs mirror pins shell-portability test-js test-sh
     @echo "workspace ci: ALL GATES GREEN"
 
 # Doc graph + workflow sync + portability (fails closed on any drift).
 docs:
     bash scripts/check-docs.sh
+
+# Shell constructs that pass on macOS and fail on the Linux CI runner. Distinct from
+# check-workflow-portability.js, which covers the JS workflow executors. Added after
+# two such defects shipped green from a macOS checkout: `env -u VAR command gh` in 8
+# scripts (env execs a program, `command` is a shell builtin, and macOS happens to
+# ship /usr/bin/command) and BSD-only `sed -i ''` in 8 places in one test, which took
+# 8 of its 21 cases down on the runner while all 21 passed locally. Its own suite
+# (check-shell-portability.test.sh) proves it catches both and passes the portable forms.
+shell-portability:
+    bash scripts/check-shell-portability.sh
 
 # ai/curaos <-> curaos 1:1 structural mirror.
 mirror:

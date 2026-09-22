@@ -71,7 +71,11 @@ done
 
 # Agent shells can carry a narrow GITHUB_TOKEN that lacks org/project scope.
 # Unset it so gh uses GH_TOKEN or the project-scoped keyring login.
-gh() { env -u GITHUB_TOKEN command gh "$@"; }
+# `command` is a SHELL BUILTIN, and env execs a PROGRAM: `env ... command gh` asks the
+# kernel for a binary called "command". macOS ships /usr/bin/command so it worked here;
+# the Linux CI runner has no such binary and every gh call died. env never resolves shell
+# functions in the first place, so nothing guards against recursion here to begin with.
+gh() { env -u GITHUB_TOKEN gh "$@"; }
 
 OWNER="your-org"
 # The labels that must NOT survive on a CLOSED issue are matched inline in the jq

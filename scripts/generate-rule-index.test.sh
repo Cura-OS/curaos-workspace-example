@@ -11,6 +11,21 @@ FAIL=0
 ok() { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
 nok() { FAIL=$((FAIL+1)); printf '  FAIL %s\n     %s\n' "$1" "$2"; }
 
+# In-place edit that works on both seds. BSD sed requires `-i ''` and GNU sed
+# requires a bare `-i`; the forms are mutually incompatible, and `-i ''` under GNU
+# consumes the empty string as the SCRIPT, so the real script is then read as a
+# filename. Measured on the Linux CI runner: every in-place edit in this file failed
+# as `sed: can't read s/always use the alpha pattern/HAND EDITED VIEW/`, taking 8 of
+# 21 cases down, while all 21 passed on macOS. Matches the canonical workspace copy.
+sedi() {
+  local expression="$1" file="$2" replacement="$2.sed-replacement"
+  if sed "$expression" "$file" > "$replacement"; then
+    mv "$replacement" "$file"
+    return 0
+  fi
+  return 1
+}
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -88,7 +103,7 @@ fi
 
 # 3) ACCEPTANCE FIXTURE: a README index row diverging from rule frontmatter
 #    makes the drift check exit nonzero
-sed -i '' 's/canonical topic text for the index/STALE hand-edited topic/' "$TMP/root/ai/rules/README.md"
+sedi 's/canonical topic text for the index/STALE hand-edited topic/' "$TMP/root/ai/rules/README.md"
 out="$(run_check)"
 if printf '%s' "$out" | grep -q 'EXIT=1' && printf '%s' "$out" | grep -q 'drifted from rule frontmatter'; then
   ok "README row drift exits nonzero"
@@ -98,7 +113,7 @@ fi
 
 # 4) an AGENTS section-15 row diverging from frontmatter title exits nonzero
 fixture; run_write > /dev/null
-sed -i '' 's/Beta (second fixture rule)/Beta (stale title)/' "$TMP/root/AGENTS.md"
+sedi 's/Beta (second fixture rule)/Beta (stale title)/' "$TMP/root/AGENTS.md"
 out="$(run_check)"
 if printf '%s' "$out" | grep -q 'EXIT=1' && printf '%s' "$out" | grep -q 'AGENTS.md: rule index drifted'; then
   ok "AGENTS row drift exits nonzero"
@@ -136,7 +151,7 @@ fi
 
 # 7) missing description field fails closed
 fixture; run_write > /dev/null
-sed -i '' '/^description:/d' "$TMP/root/ai/rules/curaos_beta_rule.md"
+sedi '/^description:/d' "$TMP/root/ai/rules/curaos_beta_rule.md"
 out="$(run_check)"
 if printf '%s' "$out" | grep -q 'EXIT=1' && printf '%s' "$out" | grep -q 'frontmatter missing description'; then
   ok "missing description exits nonzero"
@@ -146,7 +161,7 @@ fi
 
 # 8) frontmatter name not matching the filename slug fails closed
 fixture; run_write > /dev/null
-sed -i '' 's/^name: curaos-alpha-rule$/name: curaos-wrong-rule/' "$TMP/root/ai/rules/curaos_alpha_rule.md"
+sedi 's/^name: curaos-alpha-rule$/name: curaos-wrong-rule/' "$TMP/root/ai/rules/curaos_alpha_rule.md"
 out="$(run_check)"
 if printf '%s' "$out" | grep -q 'EXIT=1' && printf '%s' "$out" | grep -q '!= filename slug'; then
   ok "name/filename mismatch exits nonzero"
@@ -176,7 +191,7 @@ fi
 
 # 11) pipes in frontmatter are escaped so table rows stay intact
 fixture
-sed -i '' 's/^description: Alpha rule description - canonical topic text for the index$/description: Alpha rule description with a | pipe inside/' "$TMP/root/ai/rules/curaos_alpha_rule.md"
+sedi 's/^description: Alpha rule description - canonical topic text for the index$/description: Alpha rule description with a | pipe inside/' "$TMP/root/ai/rules/curaos_alpha_rule.md"
 out="$(run_write)"
 if printf '%s' "$out" | grep -q 'EXIT=0' \
   && grep -qF 'with a \| pipe inside |' "$TMP/root/ai/rules/README.md"; then
@@ -242,7 +257,7 @@ else
 fi
 
 # 14) hand-edited view is drift (canonical text lives in ai/rules/ only)
-sed -i '' 's/always use the alpha pattern/HAND EDITED VIEW/' "$VIEW"
+sedi 's/always use the alpha pattern/HAND EDITED VIEW/' "$VIEW"
 out="$(run_check)"
 if printf '%s' "$out" | grep -q 'EXIT=1' && printf '%s' "$out" | grep -q 'rule view drifted'; then
   ok "hand-edited view exits nonzero"
@@ -252,7 +267,7 @@ fi
 
 # 15) a paths rule without a fold marker fails closed
 paths_fixture
-sed -i '' '/fold: rationale, non-binding/d' "$TMP/root/ai/rules/curaos_alpha_rule.md"
+sedi '/fold: rationale, non-binding/d' "$TMP/root/ai/rules/curaos_alpha_rule.md"
 out="$(run_check)"
 if printf '%s' "$out" | grep -q 'EXIT=1' && printf '%s' "$out" | grep -q 'no fold marker'; then
   ok "paths rule without fold marker exits nonzero"
@@ -318,7 +333,7 @@ fi
 # 19) em dash in the binding core of a paths rule fails closed (it would ship
 #     in the generated view)
 paths_fixture
-sed -i '' "s/always use the alpha pattern/always ${EM} use the alpha pattern/" "$TMP/root/ai/rules/curaos_alpha_rule.md"
+sedi "s/always use the alpha pattern/always ${EM} use the alpha pattern/" "$TMP/root/ai/rules/curaos_alpha_rule.md"
 out="$(run_check)"
 if printf '%s' "$out" | grep -q 'EXIT=1' && printf '%s' "$out" | grep -q 'binding core contains an em/en dash'; then
   ok "em dash in paths-rule binding core exits nonzero"
