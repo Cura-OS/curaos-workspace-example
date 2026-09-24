@@ -96,8 +96,11 @@ fi
 BIN_NOJUST="$TMP/bin-nojust"
 mkstub "$BIN_NOJUST"
 rm "$BIN_NOJUST/just"
+# PATH is ONLY the stub dir: a host with /usr/bin/just (the CI runners) would otherwise resolve the
+# real runner, and the hook's `exec just ci` would re-enter this suite without bound.
+ln -s "$(command -v sh)" "$BIN_NOJUST/sh"
 : > "$LEDGER"
-status="$(run_hook "$BIN_NOJUST")"
+status="$( ( cd "$ROOT" && PATH="$BIN_NOJUST" "$BIN_NOJUST/sh" "$HOOK" </dev/null >/dev/null 2>&1 ); printf '%s' "$?")"
 if [ "$status" != "0" ]; then
   ok "a missing just runner fails closed instead of passing the push through"
 else
