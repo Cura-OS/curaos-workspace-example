@@ -135,7 +135,7 @@ Each CLI agent routes within its OWN model set. NO automatic cross-harness routi
 
 ### Aider direct
 
-- Polyglot repo-map work (when codegraph + Claude insufficient); architect mode (`gpt-5.5` high planner + Haiku 4.5 editor)
+- Polyglot repo-map work (when language server + Claude insufficient); architect mode (`gpt-5.5` high planner + Haiku 4.5 editor)
 
 ## How it satisfies CuraOS rules
 

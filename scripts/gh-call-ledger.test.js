@@ -41,7 +41,10 @@ test(
     expect(out.counts["issue view --comments"]).toBe(100);
     expect(out.scenario).toMatchObject({ name: "issue-read-100", issueCount: 100, repoCount: 10, resolved: 100 });
   },
-  120_000, // 300 sequential stub spawns; well beyond the 5s default
+  // 300 sequential stub spawns. ~5s once the stub bin lives in the checkout-local scratch
+  // (spawnScratchDir); ~102s when it regresses to $TMPDIR, so this budget is the RESULT-side
+  // gate on that regression, not just headroom over bun's 5s default.
+  60_000,
 );
 
 // ============================ scenario: batched (RP-36 acceptance) ============================
@@ -93,4 +96,35 @@ test("parse mode classifies a raw jsonl into the same ledger shape", () => {
   const out = JSON.parse(run.stdout);
   expect(out.totals).toEqual({ all: 2, graphql: 1, rest: 1, cli: 0 });
   fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+// ============================ wrap mode (recording shim over the real gh) ============================
+
+// wrap mode had NO coverage, so its shim-bin placement was unproven (found 2026-09-21 while
+// mutation-proving spawnScratchDir). Hermetic: a stub `gh` first on PATH is what `command -v gh`
+// resolves to, so the shim delegates to the stub and no real gh or network is involved. Asserts the
+// RESULT of running the CLI: the wrapped command's gh calls appear in the emitted ledger.
+test("wrap mode records the wrapped command's gh calls and delegates to the resolved gh", () => {
+  const os = require("node:os");
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ledger-wrap-"));
+  const bin = path.join(tmp, "bin");
+  fs.mkdirSync(bin, { recursive: true });
+  fs.writeFileSync(path.join(bin, "gh"), "#!/bin/sh\necho stub-gh-ran\n", { mode: 0o755 });
+  const payload = path.join(tmp, "payload.sh");
+  fs.writeFileSync(payload, "#!/bin/sh\ngh api repos/o/r/issues/3\ngh api graphql -f query=q\n", { mode: 0o755 });
+  try {
+    const run = spawnSync(process.execPath, [LEDGER_BIN, "wrap", "--", payload], {
+      encoding: "utf8",
+      cwd: ROOT,
+      env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    });
+    expect(run.status).toBe(0);
+    const out = JSON.parse(run.stdout.slice(run.stdout.indexOf("{")));
+    expect(out.mode).toBe("wrap");
+    expect(out.totals).toEqual({ all: 2, graphql: 1, rest: 1, cli: 0 });
+    expect(out.counts["api repos/:owner/:repo/issues/:n"]).toBe(1);
+    expect(out.counts.graphql).toBe(1);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

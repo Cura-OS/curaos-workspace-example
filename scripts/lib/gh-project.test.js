@@ -3,7 +3,7 @@
 // Runner: bun test. The gh binary is stubbed with a recording fake on PATH; the stderr-passthrough
 // regression runs the gh-subissue-wire workflow in a SUBPROCESS so the calling process's stderr is
 // observable (in-process the parent stderr is the test runner's own and cannot be asserted).
-const { test, expect, beforeEach, afterEach } = require("bun:test");
+const { test, expect, beforeEach, afterEach, setDefaultTimeout } = require("bun:test");
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -11,6 +11,23 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const ghProject = require("./gh-project.js");
+
+// Matches the suite-wide `--timeout 30000` the justfile passes, and is stated explicitly so a
+// bare `bun test` of this file does not silently fall back to bun's 5000ms default.
+//
+// This file used to pin its own 5000ms budget to catch a stub that costs seconds per call. That
+// guard does not work, because every case here is SPAWN-bound, not work-bound: each one forks a
+// node driver that forks the PATH stub several times. Wall-clock per-test time therefore tracks
+// host load, not stub cost, and cannot tell the two apart. Measured 2026-09-22 on this checkout:
+// the three heaviest cases run in under 1s wall EACH in isolation (bun startup included), the
+// whole 36-case file runs 5.33s at load average 39.6, and the same unmodified file reported
+// 6716ms / 5008ms / 8126ms for those same three cases minutes earlier at a higher load, failing
+// as timeouts with a NULL child status that reads like a logic fault.
+//
+// The real cost guard is load-independent and already here: the ledger assertions count the gh
+// calls each path makes (see the aliased-hierarchy case asserting ZERO REST db-id reads). A stub
+// that got slower per call shows up there as call-count growth on any machine, at any load.
+setDefaultTimeout(30000);
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const WORKFLOW_PATH = path.join(ROOT, "scripts", "workflows", "gh-subissue-wire.workflow.js");
@@ -25,7 +42,7 @@ let driverPath;
 //  - "graphql": schema probe advertises Issue.parent/subIssues -> batched hierarchy read path.
 //  - "rest-fallback": probe omits them -> classified per-child REST pair; the parent probe fails
 //    with GitHub's EXACT payload: JSON body on stdout, "gh: ... (HTTP 404)" on stderr, exit 1.
-const GH_STUB = `#!/usr/bin/env bun
+const GH_STUB = `#!/usr/bin/env node
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 if (process.env.GH_STUB_LEDGER) fs.appendFileSync(process.env.GH_STUB_LEDGER, JSON.stringify(args) + "\\n");
@@ -709,7 +726,7 @@ test("batchIssueRead chunks above ISSUE_BATCH_CHUNK aliases per document", () =>
 
 test("ensureProject memoizes per process; {refresh:true} re-lists", () => {
   const saved = { PATH: process.env.PATH, GH_STUB_LEDGER: process.env.GH_STUB_LEDGER };
-  const projListStub = `#!/usr/bin/env bun
+  const projListStub = `#!/usr/bin/env node
 const fs = require("node:fs");
 if (process.env.GH_STUB_LEDGER) fs.appendFileSync(process.env.GH_STUB_LEDGER, JSON.stringify(process.argv.slice(2)) + "\\n");
 process.stdout.write(JSON.stringify({ projects: [{ title: "CuraOS Roadmap", number: 2 }] }));

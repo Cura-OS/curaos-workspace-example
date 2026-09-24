@@ -1859,7 +1859,7 @@ if (!pendingTrackerBarrier && (mergedThisPass || dryRun)) {
   try {
     const msScope = (scan.milestones || []).join(",") || "all open issue work";
     const discovery = await agent(
-      `Discover FUTURE WORK introduced or surfaced by THIS just-merged wave for milestone scope ${msScope}. Work from ${ROOT}, READ-ONLY (Bash, \`env -u GITHUB_TOKEN gh\`; codegraph for structural questions). Scan ONLY this milestone's just-merged work + its near-term horizon.
+      `Discover FUTURE WORK introduced or surfaced by THIS just-merged wave for milestone scope ${msScope}. Work from ${ROOT}, READ-ONLY (Bash, \`env -u GITHUB_TOKEN gh\`; language server and ast-grep for structural questions). Scan ONLY this milestone's just-merged work + its near-term horizon.
 Discovery sources: (1) DEBT INTRODUCED - recent merged PRs/commits whose changes left a known-incomplete edge (search commit bodies + closeout comments for "follow-up", "TODO", "stale", "skipped", "--no-verify", "out of scope", "separate task"); (2) DEFERRED DECISIONS - \`ai/curaos/docs/adr/RESOLUTION-MAP.md\` rows marked STILL-OPEN/needs-user; (3) open issue prereqs that are not yet seeded. For each finding: kind (debt|idea|context|risk|prereq), milestone (its target metadata when known), scope (repo/module), what (one line), why (consequence). DO NOT propose anything already covered by an open issue (cheap title/label scan first). Ground every finding in a real artifact (commit, ADR row, Project gap). Return findings (array) ranked by consequence severity desc; empty if nothing.`,
       { label: "foresight-discover", phase: "Foresight", model: "opus", schema: {
         type: "object", required: ["findings"], properties: {

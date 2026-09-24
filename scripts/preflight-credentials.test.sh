@@ -142,10 +142,22 @@ else
 fi
 
 # 8. Probe requested but docker missing: exit 70 (cannot prove, fail closed).
+# The PATH is built by linking every system tool EXCEPT docker, rather than trusting
+# /usr/bin and /bin not to hold one. They do on the Linux CI runner (/usr/bin/docker),
+# where the old `$NODOCKER:/usr/bin:/bin` form let the REAL daemon run: the case failed
+# on "scratch image build failed" instead of "docker not found", while passing on macOS,
+# whose docker lives outside /usr/bin.
 NODOCKER="$TMP/nodocker"
 mkdir -p "$NODOCKER"
 cp "$TMP/gh" "$NODOCKER/gh"
-out="$(PATH="$NODOCKER:/usr/bin:/bin" GH_STUB_SCOPES="write:packages, read:packages" \
+for sysdir in /usr/bin /bin; do
+  for tool in "$sysdir"/*; do
+    name="$(basename "$tool")"
+    case "$name" in docker|docker-*) continue ;; esac
+    [ -e "$NODOCKER/$name" ] || ln -s "$tool" "$NODOCKER/$name"
+  done
+done
+out="$(PATH="$NODOCKER" GH_STUB_SCOPES="write:packages, read:packages" \
   bash "$SCRIPT" --registry-probe 2>&1; printf 'EXIT=%s\n' "$?")"
 if printf '%s' "$out" | grep -q 'EXIT=70' \
   && printf '%s' "$out" | grep -qi 'docker not found'; then

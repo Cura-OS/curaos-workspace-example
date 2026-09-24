@@ -23,11 +23,24 @@ let work;
 let leafDev;
 let noHooks;
 
+// GIT_DIR, GIT_WORK_TREE and GIT_INDEX_FILE OVERRIDE `cwd` discovery, and git exports them into
+// every hook environment. Inherited, each fixture `config` / `add` / `commit` below retargets
+// whatever repository the caller was in: running this suite from a pre-push hook wrote bare=true,
+// the fixture identity and a tmp core.hooksPath into the HOST repo's gitdir and moved its HEAD.
+// Strip them from the environment handed to every fixture git process.
+const INHERITED_GIT_ENV = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_QUARANTINE_PATH", "GIT_CONFIG_PARAMETERS"];
+function sanitizeGitEnv(env) {
+  const clean = { ...env };
+  for (const key of INHERITED_GIT_ENV) delete clean[key];
+  return clean;
+}
+
 function git(cwd, args) {
   return execFileSync("git", ["-c", "protocol.file.allow=always", ...args], {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    env: sanitizeGitEnv(process.env),
   }).trim();
 }
 
@@ -161,4 +174,25 @@ test("refuses to bump across local-only commits in an intermediate level", () =>
   expect(result.reason).toMatch(/refusing to discard/);
   // Cleanup: drop the local-only commit.
   git(midWork, ["checkout", "--detach", "origin/main"]);
+});
+
+// Host-repo corruption guard. A git hook hands GIT_DIR (and often GIT_WORK_TREE) down to whatever
+// it runs, and those override `cwd`, so an unsanitized fixture command writes into the REAL
+// repository instead of the fixture. That is not hypothetical: it set bare=true plus a fixture
+// identity in this repo's own gitdir and moved its HEAD. Asserts the RESULT of running git with a
+// poisoned environment: the decoy repo is byte-identical afterwards and the fixture got the write.
+test("fixture git commands ignore an inherited GIT_DIR instead of writing to the host repo", () => {
+  const decoy = path.join(tmp, "decoy.git");
+  git(tmp, ["init", "--bare", "-b", "main", decoy]);
+  const before = fs.readFileSync(path.join(decoy, "config"), "utf8");
+
+  execFileSync("git", ["-c", "protocol.file.allow=always", "config", "user.name", "poison probe"], {
+    cwd: leafDev,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: sanitizeGitEnv({ ...process.env, GIT_DIR: decoy, GIT_WORK_TREE: tmp }),
+  });
+
+  expect(fs.readFileSync(path.join(decoy, "config"), "utf8")).toBe(before);
+  expect(git(leafDev, ["config", "user.name"])).toBe("poison probe");
 });

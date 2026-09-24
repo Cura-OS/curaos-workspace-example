@@ -23,7 +23,6 @@ without deleting when it returns a nonempty list.
 | `.scratch/integration-queue/` | Protected | Never GC'd; lifecycle is owned by the remediation/integration wave, not by TTL |
 | `.scratch/` other files (legacy, untyped) | TTL 7 days AND unreferenced by open issues | Deleted only when older than 7 days and the basename appears in no open issue (tracker repo); when the issue check is unavailable, apply mode fails closed |
 | `.worktrees/` | Registered worktrees only | Non-worktree dirs (the stray escaped-artifact-tree class) BLOCK the GC; they need a human diff + disposition, never silent deletion |
-| `.codegraph/*.db` | WAL kept smaller than the db | `PRAGMA wal_checkpoint(TRUNCATE)` in apply mode (size evidence printed before/after); dry-run reports sizes only |
 | `.scratch/workflow-cache/roadmap-items-*` | Snapshot family (RP-71): keep newest 3 rotations | Count-based rotation, not TTL; fixed names (`roadmap-items.json`, `roadmap-items-latest.json`) never candidates |
 | `.scratch/project/curaos-roadmap-items-*` | Snapshot family (RP-71): keep newest 3 rotations | Same rotation rule; fixed `curaos-roadmap-items.json` protected |
 | `.scratch/project-items-*` (top level) | Snapshot family (RP-71): keep newest 3 rotations | Same rotation rule (the dated board-copy class) |

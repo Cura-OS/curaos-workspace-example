@@ -35,10 +35,11 @@
 
 const { execFileSync, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 
 const ROOT = path.resolve(__dirname, "..");
+// Stub/shim bins live in the checkout-local gitignored scratch, never $TMPDIR: see spawnScratchDir.
+const { spawnScratchDir } = require(path.join(__dirname, "lib", "workspace-root.js"));
 const BASELINE_PATH = path.join(ROOT, "scripts", "gh-call-ledger-baseline.json");
 
 // ---- endpoint classification ----
@@ -154,7 +155,7 @@ process.exit(64);
 `;
 
 function withStubGh(fn) {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gh-call-ledger-"));
+  const tmp = spawnScratchDir(ROOT, "gh-call-ledger-");
   const binDir = path.join(tmp, "bin");
   fs.mkdirSync(binDir, { recursive: true });
   const rawPath = path.join(tmp, "raw.jsonl");
@@ -244,7 +245,7 @@ process.exit(r.status === null ? 1 : r.status);
 
 function runWrap(cmd, cmdArgs) {
   const realGh = execFileSync("sh", ["-c", "command -v gh"], { encoding: "utf8" }).trim();
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gh-call-ledger-wrap-"));
+  const tmp = spawnScratchDir(ROOT, "gh-call-ledger-wrap-");
   const binDir = path.join(tmp, "bin");
   fs.mkdirSync(binDir, { recursive: true });
   const rawPath = path.join(tmp, "raw.jsonl");

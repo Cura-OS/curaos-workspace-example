@@ -322,19 +322,6 @@ for (const p of scratchFiles) {
   emit("SCRATCH-DELETE", p, cls, age.toFixed(1));
 }
 
-// --- .codegraph WAL sizes (checkpoint decision happens in the shell wrapper) ---
-const cgDir = path.join(root, ".codegraph");
-if (fs.existsSync(cgDir)) {
-  let entries = [];
-  try { entries = fs.readdirSync(cgDir); } catch { entries = []; }
-  for (const e of entries) {
-    if (!e.endsWith(".db")) continue;
-    const dbp = path.join(cgDir, e);
-    const dbSt = statOrNull(dbp);
-    const walSt = statOrNull(`${dbp}-wal`);
-    emit("CODEGRAPH", dbp, String(dbSt ? dbSt.size : 0), String(walSt ? walSt.size : 0));
-  }
-}
 console.log(out.join("\n"));
 EOF
 
@@ -418,29 +405,6 @@ for (const fam of rot.GC_SNAPSHOT_FAMILIES) {
 else
   log "DRY-RUN: would delete $RUN_DELETE_COUNT run dir(s) + $SCRATCH_DELETE_COUNT scratch file(s) + $SNAPSHOT_DELETE_COUNT snapshot rotation(s); nothing was deleted"
 fi
-
-# --- .codegraph WAL checkpoint (apply) / size report (dry-run) ---
-while IFS="$TAB" read -r tag dbp dbB walB; do
-  [ "$tag" = "CODEGRAPH" ] || continue
-  if [ "${walB:-0}" -gt 0 ] 2>/dev/null; then
-    if ! command -v sqlite3 >/dev/null 2>&1; then
-      log "codegraph: sqlite3 unavailable; skipping checkpoint for $dbp (db=${dbB} wal=${walB} bytes)"
-    elif [ "$APPLY" -eq 1 ]; then
-      if sqlite3 "$dbp" "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null 2>&1; then
-        AFTER="$(wc -c < "${dbp}-wal" 2>/dev/null | tr -d '[:space:]')"
-        log "codegraph: checkpointed $dbp WAL before=${walB} after=${AFTER:-0} bytes (db=${dbB})"
-      else
-        log "WARN: codegraph checkpoint failed (db busy?) for $dbp; left as-is"
-      fi
-    else
-      log "codegraph: would checkpoint $dbp (db=${dbB} wal=${walB} bytes)"
-    fi
-  else
-    log "codegraph: $dbp WAL empty (db=${dbB} bytes); no checkpoint needed"
-  fi
-done <<EOF
-$PLAN
-EOF
 
 log "done mode=$MODE runs-delete=$RUN_DELETE_COUNT scratch-delete=$SCRATCH_DELETE_COUNT snapshot-delete=$SNAPSHOT_DELETE_COUNT blockers=0"
 exit 0

@@ -22,8 +22,8 @@
 // contract, where import.meta is unavailable). Keep them in lockstep; the queued truth-contract
 // test asserts extractFunction equality.
 const { execFileSync } = require("node:child_process");
-const { existsSync } = require("node:fs");
-const { isAbsolute, resolve } = require("node:path");
+const { existsSync, mkdirSync, mkdtempSync } = require("node:fs");
+const { isAbsolute, join, resolve } = require("node:path");
 
 function workspaceRootMarker(dir) {
   return Boolean(dir) && existsSync(`${dir}/AGENTS.md`) && existsSync(`${dir}/ai`);
@@ -51,4 +51,18 @@ function resolveWorkspaceRoot(env, startDir) {
   return resolve(startDir || ".");
 }
 
-module.exports = { workspaceRootMarker, gitPathOutput, resolveWorkspaceRoot };
+// Scratch directory for files a test or tool is about to EXECUTE (PATH stubs, shims).
+// Such files must never live under the per-user $TMPDIR: macOS evaluates security policy on every
+// exec of a file under the /var/folders container, so the identical bun stub costs about 350ms per
+// spawn there against about 15ms for the same bytes inside the checkout (measured 2026-09-21).
+// That gap is what turned the 300-spawn gh-call-ledger per-issue scenario into a 102s test against
+// its 120s budget, and pushed the pm-triage-gate stub past bun's 5s default timeout. `.scratch/`
+// is gitignored, sits on the checkout volume, and is cheap to exec from.
+function spawnScratchDir(root, prefix) {
+  if (!root || !isAbsolute(root)) throw new Error(`spawnScratchDir: absolute root required, got ${JSON.stringify(root)}`);
+  const base = join(root, ".scratch");
+  mkdirSync(base, { recursive: true });
+  return mkdtempSync(join(base, prefix));
+}
+
+module.exports = { workspaceRootMarker, gitPathOutput, resolveWorkspaceRoot, spawnScratchDir };

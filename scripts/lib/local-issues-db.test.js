@@ -186,14 +186,27 @@ test("local-issues CLI supports create, list, reflect, evidence, sync queue, and
   assert.equal(fs.existsSync(marker), false, "CLI must not call gh for local operations");
 });
 
-test("local-issues CLI exits quietly when stdout pipe closes early", (t) => {
+// The precondition for this behavior is stdout LARGER than the pipe buffer (64 KiB on Linux), so
+// the writer actually blocks and then sees the reader go away; row COUNT was only ever a means to
+// that. Fat bodies reach it in 40 rows instead of 300, and every createIssue spawns sqlite3 more
+// than once, so the seeding cost falls with the count. The size is now asserted rather than
+// assumed: below one buffer the CLI never blocks and a "quiet exit" proves nothing.
+//
+// The budget MUST be declared as node:test options. A positional number after the function is
+// silently ignored, so this ran on bun's 5 second default: it squeaked under that locally and
+// timed out on the shared runner, where the old 300-row seed was far slower.
+const PIPE_BUFFER_BYTES = 64 * 1024;
+
+test("local-issues CLI exits quietly when stdout pipe closes early", { timeout: 60000 }, (t) => {
   const dbPath = tempDb(t);
   localIssues.ensureDatabase({ dbPath });
-  for (let index = 0; index < 300; index += 1) {
+  const filler = "x".repeat(4096);
+  for (let index = 0; index < 40; index += 1) {
     localIssues.createIssue({
       dbPath,
       id: `PIPE-${index}`,
       title: `Pipe issue ${index}`,
+      body: filler,
       status: "done",
       ownerPath: "scripts/local-issues.js",
       workflowName: "symphony-adoption",
@@ -201,9 +214,16 @@ test("local-issues CLI exits quietly when stdout pipe closes early", (t) => {
   }
 
   const cli = path.resolve(__dirname, "../local-issues.js");
+  const full = spawnSync(process.execPath, [cli, "list", "--db", dbPath, "--json"], { encoding: "utf8" });
+  assert.equal(full.status, 0, full.stderr || full.stdout);
+  assert.ok(
+    full.stdout.length > PIPE_BUFFER_BYTES,
+    `listing must exceed one pipe buffer to exercise the early close, got ${full.stdout.length} bytes`,
+  );
+
   const command = `${JSON.stringify(process.execPath)} ${JSON.stringify(cli)} list --db ${JSON.stringify(dbPath)} --json | head -c 1 >/dev/null`;
   const result = spawnSync("bash", ["-lc", command], { encoding: "utf8" });
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.doesNotMatch(result.stderr, /EPIPE|Unhandled 'error'/);
-}, 30000); // seeding 300 rows spawns sqlite3 300x; generous budget for a loaded I/O-bound runner
+});

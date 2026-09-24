@@ -35,7 +35,7 @@ function parseArgs(a) {
 
 const LENS_FOCUS = {
   Security: "auth, input handling, PHI boundary (HealthStack), secrets, OWASP-class bugs (SSRF/SQLi/unsafe eval), tenant isolation. Use semgrep where useful.",
-  Architecture: "pattern compliance, dependency direction (vertical→neutral never reverse), coupling, premature abstraction, contract/API integrity, codegraph_impact for blast radius.",
+  Architecture: "pattern compliance, dependency direction (vertical→neutral never reverse), coupling, premature abstraction, contract/API integrity, LSP references plus ast-grep and zvec-grep for blast radius.",
   QA: "test coverage gaps, weak assertions, brittle implementation-coupled tests, missing edge cases, mutation-survivability.",
 };
 

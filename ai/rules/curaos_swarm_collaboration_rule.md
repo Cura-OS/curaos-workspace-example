@@ -24,7 +24,7 @@ Seven locked components:
 
 ## Banned
 
-- Grep bombing (use codegraph_search per [[curaos-mcp-stack-rule]])
+- Grep bombing (use zvec-grep, the language server and ast-grep per [[curaos-mcp-stack-rule]])
 - Duplicate task dispatch (atomic claim mandatory via agent-claimed:<id> label)
 - Contradictory PRs (CODEOWNERS soft lock + pre-dispatch git merge-tree)
 - Infinite loops (hard max_turns/max_tokens ceiling + verifier 3-cycle cap)
@@ -346,7 +346,7 @@ No external shared memory store (Redis / pub-sub) required for solo-dev + 200-ag
 Per [[curaos-cli-agents-rule]] DA1: cross-harness routing only when user explicitly asks. A2A (Google April 2025; under Linux Foundation AAIF Dec 2025) protocol available for stateful long-running multi-stage workflows; NOT default; NOT auto-routed.
 
 ### MCP for agent-to-tool access (per [[curaos-mcp-stack-rule]] DA3)
-Must-have MCPs (codegraph + open-design + context-mode + computer-use + deepwiki) for tool access. Memory MCPs all BANNED per DA3.
+Must-have MCPs (open-design + context-mode + computer-use + deepwiki) for tool access. Memory MCPs all BANNED per DA3.
 
 ## Agent attribution outside commit trailers
 
@@ -373,8 +373,8 @@ P95 time-to-PR = primary velocity signal for swarm health.
 
 ### Grep bombing
 **Problem:** 200 agents running `rg` across full monorepo simultaneously saturates disk I/O.
-**Fix:** Pre-index w/ CodeGraph (per [[curaos-mcp-stack-rule]] must-have MCP). Agents query knowledge graph (sub-ms) instead of grepping files.
-**Enforce via agent system prompt:** "Use codegraph_search before rg."
+**Fix:** Pre-index w/ zvec-grep and prepare the language server (per [[curaos-mcp-stack-rule]]). Agents query knowledge graph (sub-ms) instead of grepping files.
+**Enforce via agent system prompt:** "Use zvec-grep, the language server and ast-grep before plain rg."
 
 ### Duplicate task dispatch
 **Problem:** Two agents claim same issue; both open PRs; one wasted.
@@ -411,7 +411,7 @@ P95 time-to-PR = primary velocity signal for swarm health.
 | AGENTS.md §10 agent operating rules | Submodule awareness + trust-but-verify + branch hygiene per this rule |
 | AGENTS.md §11 boundaries + approvals | T3 HITL per [[curaos-verification-stack-rule]] for destructive ops |
 | [[curaos-cli-agents-rule]] | Each CLI calls own models; cross-harness only when user asks |
-| [[curaos-mcp-stack-rule]] | codegraph for structural queries; GitHub Issues as canonical queue |
+| [[curaos-mcp-stack-rule]] | language server + ast-grep + zvec-grep for structural queries; GitHub Issues as canonical queue |
 | [[curaos-repo-conventions-rule]] | Trunk-based + agent/<type>-<module>-<slug>-<id> branches + CODEOWNERS + PR template |
 | [[curaos-verification-stack-rule]] | T2 multi-model code review subagent at PR; T3 HITL at destructive ops |
 | [[curaos-quality-gates-rule]] | CI gates run on every agent commit + PR |

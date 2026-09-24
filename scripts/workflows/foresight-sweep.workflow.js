@@ -62,7 +62,7 @@ const scopeLine = mode === "wave"
   : `CROSS-MILESTONE mode. Scan OLD + CURRENT + FUTURE milestones broadly (resolve the milestone set from the CuraOS Roadmap Project - do not hardcode).`;
 
 const discovery = await agent(
-  `Discover FUTURE WORK for CuraOS proactively - debt, improvements, ideas, missing context, risks, and next-milestone prerequisites that are NOT yet tracked. Work from ${ROOT}, READ-ONLY (Bash, \`env -u GITHUB_TOKEN gh\`; codegraph for structural questions). ${scopeLine}
+  `Discover FUTURE WORK for CuraOS proactively - debt, improvements, ideas, missing context, risks, and next-milestone prerequisites that are NOT yet tracked. Work from ${ROOT}, READ-ONLY (Bash, \`env -u GITHUB_TOKEN gh\`; language server and ast-grep for structural questions). ${scopeLine}
 
 Discovery sources (run the ones relevant to the mode):
 1. DEBT INTRODUCED - recent merged PRs / commits whose changes left a known-incomplete edge (search commit bodies + closeout comments for "follow-up", "TODO", "stale", "n/a reason", "skipped", "--no-verify", "unmapped", "out of scope", "separate task"). Each is a debt finding.

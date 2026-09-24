@@ -124,7 +124,7 @@ docs:
 - ASK before destructive ops (rm -rf, git reset --hard, DROP TABLE, force push)
 - ALWAYS run `bun run ci` before reporting done
 - ALWAYS write tests that fail on pre-change code
-- ALWAYS use `codegraph_search` before `rg` for symbol queries
+- ALWAYS use zvec-grep, the language server and ast-grep before plain `rg` for symbol queries
 
 ## Context Map (if monorepo position non-obvious)
 ```yaml

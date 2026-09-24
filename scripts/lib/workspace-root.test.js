@@ -10,7 +10,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const { resolveWorkspaceRoot, workspaceRootMarker } = require("./workspace-root.js");
+const { resolveWorkspaceRoot, workspaceRootMarker, spawnScratchDir } = require("./workspace-root.js");
 
 let tmp;
 let noHooks;
@@ -161,4 +161,27 @@ test("grill workflow stub-run from a worktree writes its report under that root'
   } finally {
     process.chdir(originalCwd);
   }
+});
+
+// Spawnable stubs must land inside the checkout, never under the per-user $TMPDIR: macOS security
+// policy evaluation on exec from /var/folders/.../T costs ~350ms per spawn against ~15ms here,
+// which is what timed out the 300-spawn gh-call-ledger scenario and the pm-triage-gate gh stub.
+// Asserts the RESULT of calling the helper: where the dir lands, and that it really is executable.
+test("spawnScratchDir returns an exec-capable dir inside the checkout, never $TMPDIR", () => {
+  const repoRoot = path.resolve(__dirname, "..", "..");
+  const dir = spawnScratchDir(repoRoot, "wsroot-spawn-");
+  try {
+    expect(dir.startsWith(path.join(repoRoot, ".scratch") + path.sep)).toBe(true);
+    expect(real(dir).startsWith(real(os.tmpdir()))).toBe(false);
+    const probe = path.join(dir, "probe");
+    fs.writeFileSync(probe, "#!/bin/sh\necho scratch-ok\n", { mode: 0o755 });
+    expect(execFileSync(probe, { encoding: "utf8" }).trim()).toBe("scratch-ok");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("spawnScratchDir refuses a relative or missing root rather than writing somewhere unrelated", () => {
+  expect(() => spawnScratchDir("relative/path", "wsroot-spawn-")).toThrow(/absolute root required/);
+  expect(() => spawnScratchDir("", "wsroot-spawn-")).toThrow(/absolute root required/);
 });

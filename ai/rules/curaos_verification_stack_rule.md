@@ -1,7 +1,7 @@
 ---
 name: curaos-verification-stack-rule
 title: Verification stack (3-tier T1/T2/T3 + cross-harness adversarial)
-description: 3-tier verification stack - T1 auto every commit (git status+diff+bun run ci+gitleaks+bun audit+c7 docs); T2 auto+async-human every PR (3-lens multi-model code review subagent Security+Architecture+QA w/ per-harness tiering matrix applied per [[curaos-model-tiering-rule]]; adversarial cross-harness review ALLOWED when case requires e.g., Claude generates Codex reviews; codegraph_impact + Lost-Pixel + cosign SBOM + Langfuse trace + Stryker mutation + coverage delta + TypeSpec regen-diff); T3 blocking HITL sync (full trigger list: ai/rules/*, PHI, access-control, schema DROP/ALTER, main push, force push, prod credential, external API mutating, destructive ops, service deletion, submodule pointer bump) w/ 4 typed decisions (Approve/Edit/Reject/Respond) + audit log; verifier pattern context-isolated cross-model + 3 cycle cap; evidence-before-claims; slopsquatting via bun audit + SBOM allowlist
+description: 3-tier verification stack - T1 auto every commit (git status+diff+bun run ci+gitleaks+bun audit+c7 docs); T2 auto+async-human every PR (3-lens multi-model code review subagent Security+Architecture+QA w/ per-harness tiering matrix applied per [[curaos-model-tiering-rule]]; adversarial cross-harness review ALLOWED when case requires e.g., Claude generates Codex reviews; LSP references + ast-grep impact proof + Lost-Pixel + cosign SBOM + Langfuse trace + Stryker mutation + coverage delta + TypeSpec regen-diff); T3 blocking HITL sync (full trigger list: ai/rules/*, PHI, access-control, schema DROP/ALTER, main push, force push, prod credential, external API mutating, destructive ops, service deletion, submodule pointer bump) w/ 4 typed decisions (Approve/Edit/Reject/Respond) + audit log; verifier pattern context-isolated cross-model + 3 cycle cap; evidence-before-claims; slopsquatting via bun audit + SBOM allowlist
 metadata:
   node_type: memory
   type: feedback
@@ -15,7 +15,7 @@ User decision (2026-05-25, DA6 walkthrough re-walked w/ interview):
 **Six locked principles:**
 
 1. **T1 (every commit, auto, no human attention)** - Full sequence: git status + git diff --stat + bun run ci + gitleaks --staged + bun audit + c7 docs lookup
-2. **T2 (every PR, auto + async-human)** - 3-lens multi-model code review subagent (Security + Architecture + QA) w/ per-harness tiering per [[curaos-model-tiering-rule]]; **adversarial cross-harness review allowed when case requires** (e.g., Claude generates → Codex reviews); plus codegraph_impact + Lost-Pixel + cosign SBOM + Langfuse trace + Stryker + coverage delta + TypeSpec regen-diff
+2. **T2 (every PR, auto + async-human)** - 3-lens multi-model code review subagent (Security + Architecture + QA) w/ per-harness tiering per [[curaos-model-tiering-rule]]; **adversarial cross-harness review allowed when case requires** (e.g., Claude generates → Codex reviews); plus LSP references + ast-grep impact proof + Lost-Pixel + cosign SBOM + Langfuse trace + Stryker + coverage delta + TypeSpec regen-diff
 3. **T3 (blocking HITL sync)** - Full trigger list w/ 4 typed decisions (Approve/Edit/Reject/Respond) + audit log
 4. **Verifier pattern context-isolated** w/ cross-model verifier + 3 cycle cap
 5. **Evidence-before-claims** - artifacts not assertions per task type
@@ -39,7 +39,7 @@ A test or consumer profile that asserts only the INPUT LOGIC of generated output
 | UI change | Screenshot OR Lost Pixel diff link |
 | Dependency add | `bun pm ls` filtered output showing version pinned |
 | New test | Test file path + `bun test --reporter=verbose` showing pass |
-| Refactor | `codegraph_impact` output + test suite green |
+| Refactor | LSP references + ast-grep impact proof output + test suite green |
 | Generated/scaffolded output (chart, manifest, config, SDK, profile values) | Rendered artifact from a REAL render run (`helm dependency build` + `helm template` output, `kustomize build`, codegen emit + `git diff`), NOT the values/spec file alone. Assert against the rendered manifest. |
 
 ### Anti-pattern
@@ -200,7 +200,7 @@ QA-lens (Sonnet 4.6 default):
 
 | Gate | Tool |
 |---|---|
-| `codegraph_impact` blast radius PR comment | codegraph MCP per [[curaos-mcp-stack-rule]] |
+| Blast radius PR comment (LSP references + ast-grep + zvec-grep) | search ladder per [[curaos-mcp-stack-rule]] |
 | Visual regression diff | Lost Pixel (self-hosted MIT) per [[curaos-quality-gates-rule]] when locked |
 | SBOM generation + signing | `syft` + `cosign` per [[curaos-image-build-rule]] |
 | Langfuse trace link in PR description | per [[curaos-agent-eval-obs-rule]] when locked |
@@ -322,7 +322,7 @@ HITL gates fire ONLY at irreversibility boundaries. If every action requires app
 | Self-confirmation bias | T2: cross-model verifier (different model family) |
 | Indefinite retry loop | T2: hard cap 3 iterations + explicit T3 escalation |
 | Stale plan execution | T2: planner validates preconditions at each step |
-| Tool soup / unbounded context | T2: codegraph_impact + per-task tool scoping per [[curaos-mcp-stack-rule]] |
+| Tool soup / unbounded context | T2: LSP references + ast-grep impact proof + per-task tool scoping per [[curaos-mcp-stack-rule]] |
 | Destructive ops bypass | T3: HITL gate w/ 4 typed decision |
 | Cross-vertical contamination | T2: dep-cruiser boundary rules per [[curaos-repo-conventions-rule]] |
 | Goal drift | T2: ground-truth eval suite + LLM-as-judge per [[curaos-agent-eval-obs-rule]] |
@@ -337,7 +337,7 @@ HITL gates fire ONLY at irreversibility boundaries. If every action requires app
 | AGENTS.md §10 trust-but-verify | Verification sequence after every sub-agent report |
 | AGENTS.md §11 boundaries + approvals | T3 HITL hard-blocks at irreversible boundaries; Replit postmortem reinforces |
 | [[curaos-cli-agents-rule]] | Multi-model code review uses per-harness tiering matrix; adversarial cross-harness allowed per case |
-| [[curaos-mcp-stack-rule]] | codegraph_impact + c7 CLI used at T1+T2 |
+| [[curaos-mcp-stack-rule]] | LSP references + ast-grep impact proof + c7 CLI used at T1+T2 |
 | [[curaos-context-engineering-rule]] | Sub-agent isolation protocol (≤2K tokens) applied to verifier sub-agents |
 | [[curaos-model-tiering-rule]] | Each lens routes within its harness's tiering; cross-harness adversarial only when case requires |
 | [[curaos-repo-conventions-rule]] | PR template Evidence/Security/Scope checklists implement T1+T2 evidence |
@@ -358,7 +358,7 @@ Why 3-tier verification w/ per-harness tiering wins:
 - **3 cycle cap** = faster escalation than 5-cycle; tighter loop discipline
 - **Evidence-before-claims** = artifacts not assertions; eliminates ghost completion
 - **4 typed HITL decisions** = audit-trail-grade decision capture (no Y/N rubber stamps)
-- **codegraph_impact at T2** = blast-radius visible before merge
+- **LSP references + ast-grep impact proof at T2** = blast-radius visible before merge
 - **Failure mode → gate map** = explicit catalog of which gate catches which agent failure
 
 ## How to apply
