@@ -207,11 +207,25 @@ is_untracked_local_worktree_holder() {
   return 0
 }
 
+# A registered linked worktree is a different checkout parked under the code tree,
+# not a directory in the code repository's mirror shape. Require its Git metadata
+# to point back at this exact path; a random or copied .git marker remains visible.
+is_registered_linked_worktree() {
+  local path="$1" git_dir worktree_root registered_gitfile
+  [ -f "$path/.git" ] || return 1
+  git_dir="$(/usr/bin/git -C "$path" rev-parse --path-format=absolute --git-dir 2>/dev/null)" || return 1
+  [ -f "$git_dir/gitdir" ] || return 1
+  worktree_root="$(cd "$path" && pwd -P)" || return 1
+  registered_gitfile="$(/bin/cat "$git_dir/gitdir" 2>/dev/null)" || return 1
+  [ "$registered_gitfile" = "$worktree_root/.git" ]
+}
+
 real_kids_of() {
   local subpath="$1" kid
   while IFS= read -r kid; do
     [ -z "$kid" ] && continue
     if [ -z "$subpath" ] && is_untracked_local_worktree_holder "$kid"; then continue; fi
+    is_registered_linked_worktree "$REAL/$subpath/$kid" && continue
     printf '%s\n' "$kid"
   done < <(list_dirs "$REAL/$subpath" "$REAL" | /usr/bin/grep -vE "$CHILD_IGNORE")
 }
