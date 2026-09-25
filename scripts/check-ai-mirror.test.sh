@@ -534,6 +534,52 @@ else
   nok "unresolvable pin must stay fail-closed" "$out"
 fi
 
+# 30) a nested repository's registered linked worktree is not a code mirror path.
+#     This is a real git worktree, not a planted .git marker; the package and its
+#     external lane checkout sit beside each other under backend/packages/.
+WS30="$TMP/ws30"
+build_base "$WS30"
+git init -q "$WS30/curaos"
+PKG="$WS30/curaos/backend/packages/pkg-a"
+git init -q "$PKG"
+: > "$PKG/package.json"
+git -C "$PKG" add package.json
+git -C "$PKG" -c user.email=t@example.invalid -c user.name=t commit -qm fixture
+LANE="$WS30/curaos/backend/packages/pkg-a.lane"
+git -C "$PKG" worktree add -q -b fixture/lane "$LANE"
+out="$(run "$WS30")"
+if printf '%s' "$out" | grep -q 'EXIT=0' \
+  && ! printf '%s' "$out" | grep -q 'backend/packages/pkg-a.lane'; then
+  ok "registered nested linked worktree is outside the code mirror (exit 0)"
+else
+  nok "registered nested worktree false-positive" "$out"
+fi
+STALE="$WS30/curaos/backend/packages/pkg-a.stale"
+mkdir -p "$STALE"
+cp "$LANE/.git" "$STALE/.git"
+out="$(run "$WS30")"
+if printf '%s' "$out" | grep -q 'EXIT=1' \
+  && printf '%s' "$out" | grep -q 'DRIFT: backend/packages/pkg-a.stale in curaos/ but missing in ai/curaos/'; then
+  ok "a copied worktree pointer at the wrong path remains mirror drift"
+else
+  nok "stale linked-worktree pointer must not hide mirror drift" "$out"
+fi
+
+# 31) a .git marker alone is not proof of registered worktree metadata. Keep the
+#     directory visible so an ordinary or malformed code tree cannot evade drift.
+WS31="$TMP/ws31"
+build_base "$WS31"
+git init -q "$WS31/curaos"
+mkdir -p "$WS31/curaos/backend/packages/pkg-a.lane"
+printf 'gitdir: /not/a/registered/worktree\n' > "$WS31/curaos/backend/packages/pkg-a.lane/.git"
+out="$(run "$WS31")"
+if printf '%s' "$out" | grep -q 'EXIT=1' \
+  && printf '%s' "$out" | grep -q 'DRIFT: backend/packages/pkg-a.lane in curaos/ but missing in ai/curaos/'; then
+  ok "an unregistered .git marker remains ordinary code-side drift"
+else
+  nok "unregistered .git marker must not hide mirror drift" "$out"
+fi
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
