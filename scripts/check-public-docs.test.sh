@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for check-public-docs.py. Self-contained: a throwaway git repo with a COPY of the script
+# Tests for check-public-docs.js. Self-contained: a throwaway git repo with a COPY of the script
 # at the same relative path, so the script's own ROOT resolution points at the fixture and no
 # test-only hook is needed in production code. Dash glyphs come from byte escapes only.
 #
@@ -9,7 +9,7 @@
 set -uo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$DIR/check-public-docs.py"
+SCRIPT="$DIR/check-public-docs.js"
 PASS=0
 FAIL=0
 ok() { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
@@ -24,7 +24,7 @@ EM="$(printf '\342\200\224')"
 newrepo() {
   repo="$TMP/$1"
   mkdir -p "$repo/scripts"
-  cp "$SCRIPT" "$repo/scripts/check-public-docs.py"
+  cp "$SCRIPT" "$repo/scripts/check-public-docs.js"
   git -C "$repo" init -q
   git -C "$repo" config user.email t@t.invalid
   git -C "$repo" config user.name t
@@ -33,14 +33,14 @@ newrepo() {
 }
 
 run() {
-  ( cd "$1" && python3 scripts/check-public-docs.py 2>&1 )
+  ( cd "$1" && node scripts/check-public-docs.js 2>&1 )
   printf 'EXIT=%s\n' "$?"
 }
 
 # 1) Vendored markdown is not repo content: a dirty node_modules must not fail a clean repo.
 repo="$(newrepo vendored)"
 printf '# clean\n\n[self](README.md)\n' > "$repo/README.md"
-git -C "$repo" add README.md scripts/check-public-docs.py
+git -C "$repo" add README.md scripts/check-public-docs.js
 mkdir -p "$repo/node_modules/pkg"
 printf '# vendored %s dash\n\n[broken](./does-not-exist.md)\n' "$EM" > "$repo/node_modules/pkg/README.md"
 out="$(run "$repo")"
@@ -77,7 +77,7 @@ rm "$repo/link.md"
 # 4) Outside a git repo the gate must fail closed, never report a clean scan of nothing.
 nogit="$TMP/nogit"
 mkdir -p "$nogit/scripts"
-cp "$SCRIPT" "$nogit/scripts/check-public-docs.py"
+cp "$SCRIPT" "$nogit/scripts/check-public-docs.js"
 printf 'a line with %s inside\n' "$EM" > "$nogit/doc.md"
 out="$(run "$nogit")"
 # The diagnostic must say WHICH failure it is: "git could not answer" and "this repo has no

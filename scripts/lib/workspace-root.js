@@ -1,6 +1,6 @@
 // scripts/lib/workspace-root.js
-// RP-27: workspace-root resolution for artifact writers (grill verdicts, snapshots, mirror docs)
-// and the RP-75 local-state GC. Artifact destinations MUST resolve from an ABSOLUTE workspace root,
+// RP-27: workspace-root resolution for retained template code and documentation checks.
+// File destinations MUST resolve from an ABSOLUTE workspace root,
 // never the caller cwd and never `..`-relative hops, which escape linked worktrees into
 // git-invisible paths (the .worktrees/ai/ stray-doc class: 6 mirror docs + 2 services landed
 // git-invisible in one day).
@@ -9,18 +9,15 @@
 // 1. WORKSPACE_ROOT env override (absolute + marker-validated).
 // 2. git: `rev-parse --show-toplevel`, then climb `--show-superproject-working-tree` out of nested
 //    submodule checkouts. A linked worktree of the workspace is a VALID root: its tracked
-//    ai/curaos/docs/grills/ is the git-visible destination on that lane's branch.
+//    files belong to that lane's branch.
 // 3. startDir/cwd fallback for runs outside any marker-bearing git checkout (stub/test runs).
 //
 // Marker = AGENTS.md + ai/ both present: the workspace root carries both; submodule repos are
 // code-only per [[curaos-repo-boundary-rule]] and carry neither, so a submodule toplevel can never
 // be mistaken for the workspace root.
 //
-// MIRROR CONTRACT: workspaceRootMarker / gitPathOutput / resolveWorkspaceRoot are textually
-// identical to the inline copies in scripts/workflows/opposite-harness-grill.workflow.js (the
-// workflow cannot require this module: its source is executed via `new Function` in the truth
-// contract, where import.meta is unavailable). Keep them in lockstep; the queued truth-contract
-// test asserts extractFunction equality.
+// Current workflow, task and policy execution is delegated by scripts/rice-toolkit.js to the
+// explicitly configured maintained workspace; this helper does not write working knowledge.
 const { execFileSync } = require("node:child_process");
 const { existsSync, mkdirSync, mkdtempSync } = require("node:fs");
 const { isAbsolute, join, resolve } = require("node:path");

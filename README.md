@@ -49,7 +49,7 @@ A sanitized example of a multi-agent engineering workspace. It shows the rules, 
 2. Rename `ai/example/` to your project name.
 3. Keep only the rules that fit your team.
 4. Add your own code tree outside this sanitized example.
-5. Run `python3 scripts/check-public-docs.py` before publishing.
+5. Run `node scripts/check-public-docs.js` before publishing.
 
 ## What was removed before publishing
 

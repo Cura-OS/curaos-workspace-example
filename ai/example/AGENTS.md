@@ -35,7 +35,7 @@ and keep the code tree beside `ai/` rather than inside it.
 ## Toolchain Registry
 
 - Package manager and task runner: `bun` and `just` (see the repo `justfile`).
-- Docs and link check: `python3 scripts/check-public-docs.py`.
+- Docs and link check: `node scripts/check-public-docs.js`.
 - Full local gate: `just ci` (docs, mirror, pins, and the JS and shell suites).
 - No product build, service, or deployment tooling ships in this sample.
 

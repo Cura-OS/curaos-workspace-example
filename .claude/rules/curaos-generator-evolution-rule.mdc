@@ -24,7 +24,7 @@ When a worker (or reviewer, or orchestrator) hits an edge case inside a generate
 1. The local fix inside the service/package (unblocks current work).
 2. A corresponding generator update - template, post-scaffold hook, playbook, or codegen-tool flag - that emits the fix as the new default for every future scaffold.
 
-If the generator update is too large for the same PR, file a follow-up issue against the generator under the same milestone with `priority=critical` and `requires=` set to the current Story, and add `ready-for-agent` only after the local fix lands.
+If the generator update is too large for the same PR, create a critical Rice task owned by the generator under the same milestone, link it with `depends-on` to the current task, and dispatch it only after the local fix lands and Rice context confirms readiness.
 
 **Why:** Generators are the injection-molding presses for CuraOS ([[curaos-architecture-vision]]). A press that produces a defective part once will produce defective parts forever unless the mold is updated. The local hot-fix is necessary; the mold update is non-negotiable. Otherwise every future service repeats the same edge-case fix.
 
@@ -57,6 +57,6 @@ The rule fires when any of these holds inside a generated code/doc tree:
 
 If a worker handles it locally without folding back to the generator, the generator stays defective. The next service hits the same wall.
 
-Also BINDING below the fold: the in-flight generator/SDK barrier (downstream-milestone dispatch BLOCKED while any codegen/SDK/contracts lane carries `agent-claimed:*` or `agent-PR-open`; summary in AGENTS.md section 8) and the trio + frontend-parity + downstream-profile re-verification steps.
+Also BINDING below the fold: the in-flight generator/SDK barrier (downstream-milestone dispatch BLOCKED while a Rice codegen/SDK/contracts task has active execution or an unmerged linked PR) and the trio + frontend-parity + downstream-profile re-verification steps.
 
 Binding core only. Full rule + rationale: ai/rules/curaos_generator_evolution_rule.md (canonical; edit there, then run node scripts/generate-rule-index.js --write).

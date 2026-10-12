@@ -6,8 +6,7 @@ node_modules/
 .serena/
 *.tsbuildinfo
 
-# Local agent / orchestration scratch
-.agent-workflow-kit/runs/
+# Build/test scratch (never task or execution authority)
 .scratch/
 .scratch-*/
 .worktrees/
@@ -17,6 +16,3 @@ external-sources/
 
 # OS
 .DS_Store
-
-# Local issue tracker DB (regenerate locally)
-*.sqlite
