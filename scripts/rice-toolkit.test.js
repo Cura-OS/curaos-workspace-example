@@ -21,8 +21,9 @@ test('persistent configure survives a fresh process and routes native work argum
 });
 test('workflow answers stay exact JSON stdin across the native process boundary',t=>{
   const f=fixture(t);toolkit.configure(f.values,f.profile);const answer='{"request-1":{"verdict":"pass"}}\n';
-  const actual=JSON.parse(execFileSync(process.execPath,[script,'workflow','context-load','--run','run-1','--answers-file','-','--json'],{input:answer,encoding:'utf8',env:{...process.env,RICE_TOOLKIT_CONFIG:f.profile}}));
-  assert.equal(actual.stdin,answer);assert.deepEqual(actual.args,['context-load','--run','run-1','--answers-file','-','--json']);assert.equal(actual.cwd,f.root);
+  const argumentsJSON=JSON.stringify({issue:'fixture-kb:issues/TASK'});
+  const actual=JSON.parse(execFileSync(process.execPath,[script,'workflow','context-load','--args-json',argumentsJSON,'--run','run-1','--answers-file','-','--json'],{input:answer,encoding:'utf8',env:{...process.env,RICE_TOOLKIT_CONFIG:f.profile}}));
+  assert.equal(actual.stdin,answer);assert.deepEqual(actual.args,['context-load','--args-json',argumentsJSON,'--run','run-1','--answers-file','-','--json']);assert.equal(actual.cwd,f.root);
 });
 test('native client and maintained work context preserve selected executable/profile and arguments',t=>{
   const f=fixture(t);toolkit.configure(f.values,f.profile);

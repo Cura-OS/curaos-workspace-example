@@ -32,7 +32,7 @@ client/profile binding and native arguments preserved:
 node scripts/rice-toolkit.js check
 node scripts/rice-toolkit.js rice context --id source:canonical/task
 node scripts/rice-toolkit.js work list --json
-node scripts/rice-toolkit.js workflow context-load --issue source:canonical/task --json
+node scripts/rice-toolkit.js workflow context-load --args-json '{"issue":"source:canonical/task"}' --json
 ```
 
 Work authoring uses the maintained runtime's JSON stdin commands. Workflow answers
