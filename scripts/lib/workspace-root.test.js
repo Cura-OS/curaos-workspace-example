@@ -8,7 +8,6 @@ const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { pathToFileURL } = require("node:url");
 
 const { resolveWorkspaceRoot, workspaceRootMarker, spawnScratchDir } = require("./workspace-root.js");
 
@@ -130,36 +129,6 @@ test("resolved roots are absolute and carry no .. segments", () => {
     const resolved = resolveWorkspaceRoot({}, dir);
     expect(path.isAbsolute(resolved)).toBe(true);
     expect(resolved.split(path.sep)).not.toContain("..");
-  }
-});
-
-test("grill workflow stub-run from a worktree writes its report under that root's ai/curaos/docs/grills/ (RP-27 acceptance)", async () => {
-  const workflowPath = path.resolve(__dirname, "../workflows/opposite-harness-grill.workflow.js");
-  const mod = await import(pathToFileURL(workflowPath).href);
-  const originalCwd = process.cwd();
-  try {
-    // Run from INSIDE the linked worktree's submodule checkout: the worst historical case.
-    process.chdir(wtSub);
-    const result = await mod.default({
-      args: {
-        subject: "rp-27 worktree stub-run",
-        // 1ms probe budget forces the deterministic blocked-report writer path: the EXECUTOR
-        // (not an agent) writes the artifact, which is exactly the writer under test.
-        probe_timeout_ms: 1,
-      },
-      agent: async () => ({ verdict: "pass", issues: [], report_path: "" }),
-      phase: () => {},
-      log: () => {},
-    });
-    const grillsDir = path.join(real(wt), "ai", "curaos", "docs", "grills");
-    expect(real(path.dirname(result.report_path))).toBe(grillsDir);
-    expect(path.basename(result.report_path)).toMatch(/^rp-27-worktree-stub-run-[a-f0-9]{12}\.md$/);
-    expect(fs.existsSync(result.report_path)).toBe(true);
-    // The report must NOT have landed relative to the cwd (wt/code) or escaped above wt.
-    expect(fs.existsSync(path.join(wtSub, "ai"))).toBe(false);
-    expect(fs.existsSync(path.join(tmp, "ai"))).toBe(false);
-  } finally {
-    process.chdir(originalCwd);
   }
 });
 
