@@ -3,7 +3,7 @@ pre-commit:
   commands:
     public-docs:
       glob: "**/*.md"
-      run: python3 scripts/check-public-docs.py
+      run: node scripts/check-public-docs.js
     gitleaks:
       run: gitleaks git --staged --redact
 

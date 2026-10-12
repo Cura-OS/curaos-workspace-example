@@ -45,7 +45,7 @@ pins:
 # the submodule and bleeds out of repo scope.
 #
 # --timeout raises bun's 5000ms per-test DEFAULT for the whole suite. Several
-# cases here drive real subprocesses (sqlite3 per row, PATH stubs per gh call),
+# cases here drive real Git repositories and native command stubs,
 # and a subprocess cost that is invisible on one host can dominate on another.
 # The runner is NOT uniformly slower than a laptop: measured, it ran the slowest
 # gh-project case in 114ms against 11s here, so "the runner is slower" is the
@@ -58,7 +58,7 @@ pins:
 # takes a positional number, node:test takes `{ timeout }`; a positional number
 # on a node:test case is SILENTLY IGNORED).
 test-js:
-    bun test --timeout 30000 scripts/*.test.js scripts/lib/*.test.js
+    bun test --timeout 30000 ./scripts/*.test.js ./scripts/lib/*.test.js
 
 # AGENTS.md schema gate alone (RP-14); also runs inside `just docs` via check-docs.sh.
 agents-schema:
@@ -68,17 +68,9 @@ agents-schema:
 test-sh:
     for t in scripts/*.test.sh; do echo "== $t"; bash "$t"; done
 
-# Incremental mutation testing over the committed workflow executors (RP-60).
-# Opt-in pre-milestone-release check; NOT part of the default `just ci` gate
-# (command-runner mutation across 19 executors runs minutes-to-hours; ci stays
-# fast). Config: stryker.conf.json (incremental state under gitignored
-# .cache/). Extra args pass through, e.g.:
-#   just mutate --mutate "scripts/workflows/lens-review.workflow.js"
-#   just mutate --force            # rebuild the incremental baseline
-#   just mutate --dryRunOnly       # validate setup without mutating
-mutate *args:
-    bun install --frozen-lockfile
-    bun x stryker run stryker.conf.json {{args}}
+# Runtime operations execute through the persisted owning-workspace reference.
+toolkit *args:
+    node scripts/rice-toolkit.js {{args}}
 
 # Install fail-closed git hooks (tracked .githooks/ stubs resolve lefthook at run time).
 hooks:

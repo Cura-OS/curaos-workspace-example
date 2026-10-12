@@ -29,6 +29,10 @@ This repository is a sanitized example of a multi-agent engineering workspace. I
 - Keep Markdown links local and valid.
 - Do not add em dash or en dash characters.
 
+## Working authority
+
+Rice owns working tasks, specifications, research, decisions and links. This template contains no tracker backend or executable workflow library. Use the persistent configured toolkit described in [setup](SETUP.md) and [toolkit consumption](docs/agents/rice-toolkit.md). Keep code/product docs and bootstrap configuration in Git; do not create planning files or import historical recovery as a fallback.
+
 ## Agent Workflow
 
 1. Read `README.md` and `SETUP.md`.
@@ -40,7 +44,7 @@ This repository is a sanitized example of a multi-agent engineering workspace. I
 ## Checks
 
 ```bash
-python3 scripts/check-public-docs.py
+node scripts/check-public-docs.js
 gitleaks detect --no-banner --redact
 ```
 
@@ -59,7 +63,7 @@ Generated from `ai/rules/*` frontmatter by `node scripts/generate-rule-index.js 
 | Bun compile packaging (single-binary services, local==live compile parity) | [curaos_bun_compile_rule.md](ai/rules/curaos_bun_compile_rule.md) |
 | Bun primary | [curaos_bun_primary_rule.md](ai/rules/curaos_bun_primary_rule.md) |
 | Caveman terse communication (full/ultra; token-cut prose) | [curaos_caveman_rule.md](ai/rules/curaos_caveman_rule.md) |
-| CLI agents stack (multi-primary Claude+Codex+Pi+Gemini+Aider+Cursor) | [curaos_cli_agents_rule.md](ai/rules/curaos_cli_agents_rule.md) |
+| Per-project Codex and Claude Rice tooling | [curaos_cli_agents_rule.md](ai/rules/curaos_cli_agents_rule.md) |
 | CNI (Cilium primary + sidecar-less mTLS) | [curaos_cni_rule.md](ai/rules/curaos_cni_rule.md) |
 | Context engineering (Anthropic 5 criteria + BATS) | [curaos_context_engineering_rule.md](ai/rules/curaos_context_engineering_rule.md) |
 | Decision methodology (interview funnel) | [curaos_decision_methodology.md](ai/rules/curaos_decision_methodology.md) |
@@ -67,13 +71,13 @@ Generated from `ai/rules/*` frontmatter by `node scripts/generate-rule-index.js 
 | Design generation (OpenDesign-driven, generator-ingestable) | [curaos_design_generation_rule.md](ai/rules/curaos_design_generation_rule.md) |
 | Doc graph / LLM wiki maintenance | [curaos_doc_graph_rule.md](ai/rules/curaos_doc_graph_rule.md) |
 | Error tracking (GlitchTip prod + Sentry SaaS dev) | [curaos_error_tracking_rule.md](ai/rules/curaos_error_tracking_rule.md) |
-| Foresight + proactive task creation (capture discovered dependency work; triage relevant foresight like normal work) | [curaos_foresight_rule.md](ai/rules/curaos_foresight_rule.md) |
+| Rice-linked discovered work and dependencies | [curaos_foresight_rule.md](ai/rules/curaos_foresight_rule.md) |
 | Foundation runtime directives (NestJS) | [curaos_foundation_runtime_directives.md](ai/rules/curaos_foundation_runtime_directives.md) |
 | Full-surface sweep (every page/view/action + real-API proof + docs/marketing alignment), local and live | [curaos_full_surface_sweep_rule.md](ai/rules/curaos_full_surface_sweep_rule.md) |
 | Generator-evolution (every edge case feeds back into the generator) | [curaos_generator_evolution_rule.md](ai/rules/curaos_generator_evolution_rule.md) |
 | HealthStack vision (patient-centric) | [curaos_healthstack_vision.md](ai/rules/curaos_healthstack_vision.md) |
 | Image build (BuildKit dev/CI + Buildah air-gap) | [curaos_image_build_rule.md](ai/rules/curaos_image_build_rule.md) |
-| Knowledge persistence (6-layer L1-L6) | [curaos_knowledge_persistence_rule.md](ai/rules/curaos_knowledge_persistence_rule.md) |
+| Rice working knowledge and code documentation | [curaos_knowledge_persistence_rule.md](ai/rules/curaos_knowledge_persistence_rule.md) |
 | Live ops substrate (build-host + example-homelab) | [curaos_live_ops_substrate_rule.md](ai/rules/curaos_live_ops_substrate_rule.md) |
 | Local-CI-first (local `just ci` default gate + GH Actions `workflow_dispatch`-only + evidence-pasting) | [curaos_local_ci_first_rule.md](ai/rules/curaos_local_ci_first_rule.md) |
 | Local vs 3rd-party provider | [curaos_local_vs_3rdparty_rule.md](ai/rules/curaos_local_vs_3rdparty_rule.md) |
@@ -96,15 +100,15 @@ Generated from `ai/rules/*` frontmatter by `node scripts/generate-rule-index.js 
 | Repo conventions (kebab-case + Conventional Commits + Turborepo) | [curaos_repo_conventions_rule.md](ai/rules/curaos_repo_conventions_rule.md) |
 | Reuse + DRY for code and docs | [curaos_reuse_dry_rule.md](ai/rules/curaos_reuse_dry_rule.md) |
 | RN E2E (Maestro primary) | [curaos_rn_e2e_rule.md](ai/rules/curaos_rn_e2e_rule.md) |
-| Roadmap workflow (1 org Project + 7-layer hierarchy + sub-issues + Pocock skill flow + 9 canonical + 2 runtime labels + 10 fields + 10 views + Tier 1+2 automation + goal-gated Cycles) | [curaos_roadmap_workflow_rule.md](ai/rules/curaos_roadmap_workflow_rule.md) |
+| Rice task graph and forge integration | [curaos_roadmap_workflow_rule.md](ai/rules/curaos_roadmap_workflow_rule.md) |
 | Rolling update (no -v2 / -next / -new parallel paths - forward migration + feature flag + semver bump only) | [curaos_rolling_update_rule.md](ai/rules/curaos_rolling_update_rule.md) |
 | Runtime decisions (stable-core + plugin/sidecar) | [curaos_runtime_decisions.md](ai/rules/curaos_runtime_decisions.md) |
 | Self-serve, never hand the user work the agent can do | [curaos_self_serve_no_user_handoff_rule.md](ai/rules/curaos_self_serve_no_user_handoff_rule.md) |
 | SLO mgmt (Pyrra + OpenSLO) | [curaos_slo_rule.md](ai/rules/curaos_slo_rule.md) |
 | Speed patterns (generator-first Nx + Bun-native + Turborepo + Verdaccio + GHCR devcontainer) | [curaos_speed_patterns_rule.md](ai/rules/curaos_speed_patterns_rule.md) |
 | Stack priorities | [curaos_stack_priorities.md](ai/rules/curaos_stack_priorities.md) |
-| Swarm collaboration (bundle-first submodule lanes + GitHub Issues queue + uncapped collision-bounded lanes) | [curaos_swarm_collaboration_rule.md](ai/rules/curaos_swarm_collaboration_rule.md) |
-| Symphony alignment for agent workflows and local-first orchestration | [curaos_symphony_alignment_rule.md](ai/rules/curaos_symphony_alignment_rule.md) |
+| Native harness collaboration and Rice task ownership | [curaos_swarm_collaboration_rule.md](ai/rules/curaos_swarm_collaboration_rule.md) |
+| Symphony alignment through maintained Rice execution | [curaos_symphony_alignment_rule.md](ai/rules/curaos_symphony_alignment_rule.md) |
 | Triplet split (personal/business variants only for named divergent subject ownership + downstream consumer) | [curaos_triplet_split_rule.md](ai/rules/curaos_triplet_split_rule.md) |
 | Validation (Zod 4 / Valibot / ArkType 3-tier) | [curaos_validation_rule.md](ai/rules/curaos_validation_rule.md) |
 | Verification stack (3-tier T1/T2/T3 + cross-harness adversarial) | [curaos_verification_stack_rule.md](ai/rules/curaos_verification_stack_rule.md) |

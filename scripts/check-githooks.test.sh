@@ -20,15 +20,15 @@ trap 'rm -rf "$TMP"' EXIT
 LEDGER="$TMP/ledger"
 : > "$LEDGER"
 
-# Stub bin: the hook calls python3, gitleaks and just by bare name, so a PATH prepend makes the
+# Stub bin: the hook calls node, gitleaks and just by bare name, so a PATH prepend makes the
 # whole run hermetic. JUST_EXIT drives the "declared gate went red" case.
 mkstub() {
   bin="$1"
   mkdir -p "$bin"
-  printf '#!/bin/sh\necho "python3 $*" >> "%s"\nexit ${PYTHON_EXIT:-0}\n' "$LEDGER" > "$bin/python3"
+  printf '#!/bin/sh\necho "node $*" >> "%s"\nexit ${NODE_EXIT:-0}\n' "$LEDGER" > "$bin/node"
   printf '#!/bin/sh\necho "gitleaks $*" >> "%s"\nexit ${GITLEAKS_EXIT:-0}\n' "$LEDGER" > "$bin/gitleaks"
   printf '#!/bin/sh\necho "just $*" >> "%s"\necho "GIT_DIR=[${GIT_DIR:-}]" >> "%s"\nexit ${JUST_EXIT:-0}\n' "$LEDGER" "$LEDGER" > "$bin/just"
-  chmod +x "$bin/python3" "$bin/gitleaks" "$bin/just"
+  chmod +x "$bin/node" "$bin/gitleaks" "$bin/just"
 }
 
 run_hook() {
@@ -67,7 +67,7 @@ fi
 # 3b) Every earlier leg is blocking too: a public-docs or secret-scan failure must stop the push
 #     AND must not fall through to the gate as if the checkout were clean.
 : > "$LEDGER"
-status="$(run_hook "$BIN" env PYTHON_EXIT=1)"
+status="$(run_hook "$BIN" env NODE_EXIT=1)"
 if [ "$status" != "0" ] && ! grep -q '^just ci$' "$LEDGER"; then
   ok "a failing public-docs check blocks the push before the gate runs"
 else

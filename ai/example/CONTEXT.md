@@ -1,19 +1,3 @@
-# Example Project Context
+# Example project context
 
-This is a placeholder for project-specific context.
-
-## What To Document Here
-
-- Current milestone or release goal.
-- Major system boundaries.
-- Runtime and test commands.
-- Integration points.
-- Known blockers and verification gates.
-
-## What Not To Put Here
-
-- Secrets.
-- Customer data.
-- Private infrastructure addresses.
-- Internal commercial strategy.
-- Product code.
+This placeholder describes product boundaries, code/test commands, integrations and maintained documentation. Store working goals, tasks, blockers, plans, decisions and research in configured Rice documents, with linked current context. Do not place secrets, customer data, private infrastructure, commercial strategy or product code here.

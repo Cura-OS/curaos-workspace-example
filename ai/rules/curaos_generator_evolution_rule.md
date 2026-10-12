@@ -130,7 +130,7 @@ User directive 2026-05-27: when ANY generator or SDK has an in-flight fix/improv
    ```
 2. If the result is non-empty, the new milestone wave is BLOCKED. Orchestrator may proactively triage (§3.4) Stories under the next-milestone Epic but MUST NOT dispatch workers against them. Per user directive 2026-05-27: "you can always unblock the next milestone proactively, but not start taking their tasks in."
 3. Block lifts ONLY when every in-flight generator/SDK lane has merged AND the §3.11 generator-evolution sweep on the most recent wave is clean (no open `priority=critical` generator-evolution follow-ups).
-4. Exception: user explicit authorization ("ok to start M8 now even though #92 is still in flight"). Record as `user_override: <issue-url>` in `.scratch/active-agent-lanes.json`. Default is WAIT.
+4. Exception: an explicit owner authorization may waive this barrier. Record the exact override and issue reference in the configured Rice lane/execution record. A missing override keeps the barrier active.
 
 Same gate applies to bulk-shipping milestones (M11/M13). The §3.11 cumulative-pattern detection trigger (≥3 hits on same surface) graduates from "file hardening lane" to "BLOCK the bulk milestone until hardening lane lands."
 
