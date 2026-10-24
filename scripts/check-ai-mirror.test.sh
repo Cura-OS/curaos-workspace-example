@@ -623,6 +623,28 @@ else
   nok "tracked linked gitlink must not be filtered out" "$out"
 fi
 
+# A non-ASCII gitlink must be read literally even with Git's default quoting.
+UNICODE_LINKED="$WS32/curaos/backend/packages/pkg-é"
+git -C "$MODULE" worktree add -q --detach "$UNICODE_LINKED" "$PIN" || exit 1
+git -C "$WS32/curaos" update-index --add --cacheinfo "160000,$PIN,backend/packages/pkg-é" || exit 1
+mkdir -p "$WS32/ai/curaos/backend/packages/pkg-é"
+out="$(run "$WS32")"
+if printf '%s' "$out" | grep -q 'EXIT=0' \
+  && ! printf '%s' "$out" | grep -q 'DRIFT:'; then
+  ok "non-ASCII tracked linked gitlink is mirrored without a .gitmodules entry"
+else
+  nok "non-ASCII tracked linked gitlink must not be filtered out" "$out"
+fi
+rmdir "$WS32/ai/curaos/backend/packages/pkg-é" || exit 1
+out="$(run "$WS32")"
+if ! printf '%s' "$out" | grep -q 'EXIT=0' \
+  && printf '%s' "$out" | grep -q 'DRIFT:.*pkg-é'; then
+  ok "missing non-ASCII linked gitlink mirror fails closed"
+else
+  nok "missing non-ASCII linked gitlink mirror must fail" "$out"
+fi
+mkdir -p "$WS32/ai/curaos/backend/packages/pkg-é"
+
 # 34) an unreadable index cannot prove a linked checkout is untracked, so it
 #     stays visible and its missing mirror still fails the gate.
 rm -rf "$WS32/ai/curaos/backend/packages/pkg-linked"

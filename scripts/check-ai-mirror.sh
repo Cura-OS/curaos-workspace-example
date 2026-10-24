@@ -221,7 +221,7 @@ is_registered_linked_worktree() {
 }
 
 real_kids_of() {
-  local subpath="$1" kid childpath staged
+  local subpath="$1" kid childpath staged record
   while IFS= read -r kid; do
     [ -z "$kid" ] && continue
     if [ -z "$subpath" ] && is_untracked_local_worktree_holder "$kid"; then continue; fi
@@ -230,10 +230,16 @@ real_kids_of() {
     # A failed index lookup proves nothing, so the child stays visible.
     if ! printf '%s\n' "$SUBMODULE_PATHS" | /usr/bin/grep -Fxq "$childpath" \
       && is_registered_linked_worktree "$REAL/$childpath" \
-      && staged="$(/usr/bin/git -C "$REAL" ls-files --stage -- ":(literal)$childpath" 2>/dev/null)" \
-      && ! printf '%s\n' "$staged" \
-        | /usr/bin/awk -F '\t' '$1 ~ /^160000 / { print $2 }' \
-        | /usr/bin/grep -Fxq "$childpath"; then
+      && staged="$(
+        set -o pipefail
+        /usr/bin/git -C "$REAL" ls-files --stage -z -- ":(literal)$childpath" 2>/dev/null \
+          | while IFS= read -r -d '' record; do
+              if [[ "$record" == 160000\ * ]] && [ "${record#*$'\t'}" = "$childpath" ]; then
+                printf '%s\n' gitlink
+              fi
+            done
+      )" \
+      && [ -z "$staged" ]; then
       continue
     fi
     printf '%s\n' "$kid"
