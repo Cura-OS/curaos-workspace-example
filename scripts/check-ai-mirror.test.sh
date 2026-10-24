@@ -580,6 +580,65 @@ else
   nok "unregistered .git marker must not hide mirror drift" "$out"
 fi
 
+# 32) a declared, tracked gitlink remains a mirror leaf when its checkout is a
+#     registered linked worktree. An unrelated parked checkout stays excluded.
+WS32="$TMP/ws32"
+build_base "$WS32"
+git init -q "$WS32/curaos" || exit 1
+MODULE="$TMP/ws32-module"
+git init -q "$MODULE" || exit 1
+: > "$MODULE/package.json"
+git -C "$MODULE" add package.json || exit 1
+git -C "$MODULE" -c user.email=t@example.invalid -c user.name=t commit -qm fixture || exit 1
+PIN="$(git -C "$MODULE" rev-parse HEAD)" || exit 1
+LINKED="$WS32/curaos/backend/packages/pkg-linked"
+PARKED="$WS32/curaos/backend/packages/pkg-linked.parked"
+git -C "$MODULE" worktree add -q --detach "$LINKED" "$PIN" || exit 1
+git -C "$MODULE" worktree add -q --detach "$PARKED" "$PIN" || exit 1
+git -C "$WS32/curaos" config -f .gitmodules submodule.pkg-linked.path backend/packages/pkg-linked || exit 1
+git -C "$WS32/curaos" config -f .gitmodules submodule.pkg-linked.url https://example.invalid/pkg-linked.git || exit 1
+git -C "$WS32/curaos" update-index --add --cacheinfo "160000,$PIN,backend/packages/pkg-linked" || exit 1
+mkdir -p "$WS32/ai/curaos/backend/packages/pkg-linked"
+if ! git -C "$MODULE" worktree list --porcelain | grep -Fx "worktree $(cd "$LINKED" && pwd -P)" >/dev/null \
+  || ! git -C "$MODULE" worktree list --porcelain | grep -Fx "worktree $(cd "$PARKED" && pwd -P)" >/dev/null \
+  || ! git -C "$WS32/curaos" ls-files --stage | grep -F "160000 $PIN 0" >/dev/null; then
+  nok "linked gitlink fixture setup" "native Git registration or tracked gitlink is absent"
+  exit 1
+fi
+out="$(run "$WS32")"
+if printf '%s' "$out" | grep -q 'EXIT=0' \
+  && ! printf '%s' "$out" | grep -q 'DRIFT:'; then
+  ok "declared linked gitlink is mirrored while a parked checkout is excluded"
+else
+  nok "declared linked gitlink must not be filtered out" "$out"
+fi
+
+# 33) the native index also identifies a gitlink when .gitmodules lacks its entry.
+git -C "$WS32/curaos" config -f .gitmodules --remove-section submodule.pkg-linked || exit 1
+out="$(run "$WS32")"
+if printf '%s' "$out" | grep -q 'EXIT=0' \
+  && ! printf '%s' "$out" | grep -q 'DRIFT:'; then
+  ok "tracked linked gitlink is mirrored without a .gitmodules entry"
+else
+  nok "tracked linked gitlink must not be filtered out" "$out"
+fi
+
+# 34) an unreadable index cannot prove a linked checkout is untracked, so it
+#     stays visible and its missing mirror still fails the gate.
+rm -rf "$WS32/ai/curaos/backend/packages/pkg-linked"
+printf 'corrupt' > "$WS32/curaos/.git/index"
+if git -C "$WS32/curaos" ls-files --stage >/dev/null 2>&1; then
+  nok "corrupt index fixture setup" "native Git still read the index"
+  exit 1
+fi
+out="$(run "$WS32")"
+if ! printf '%s' "$out" | grep -q 'EXIT=0' \
+  && printf '%s' "$out" | grep -q 'DRIFT:.*pkg-linked'; then
+  ok "unreadable index keeps a linked checkout visible and fails closed"
+else
+  nok "unreadable index must not hide a linked checkout" "$out"
+fi
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
